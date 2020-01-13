@@ -1,5 +1,5 @@
 /*
- *  MHMStokesTest.cpp
+ *  MHMDarcyTest.cpp
  *  PZ
  *
  *  Created by Pablo Carvalho on 28/07/2017.
@@ -7,7 +7,7 @@
  *
  */
 
-#include "MHMStokesTest.h"
+#include "MHMDarcyTest.h"
 #include "pzcheckgeom.h"
 #include "pzstack.h"
 #include "TPZParSkylineStructMatrix.h"
@@ -27,7 +27,8 @@
 #include "pzcondensedcompel.h"
 #include "TPZExtendGridDimension.h"
 #include "tpzgeoelrefpattern.h"
-#include "TPZMHMStokesMeshControl.h"
+//#include "TPZMHMDarcyDFNMeshControl.h"
+#include "TPZMHMeshControl.h"
 #include "tpzarc3d.h"
 #include "tpzgeoblend.h"
 
@@ -37,11 +38,11 @@ const REAL Pi=M_PI;
 
 const REAL phi_r = 0.;
 
-TPZTransform<REAL> MHMStokesTest::f_T(3,3);
+TPZTransform<REAL> MHMDarcyTest::f_T(3,3);
 
-TPZTransform<REAL> MHMStokesTest::f_InvT(3,3);
+TPZTransform<REAL> MHMDarcyTest::f_InvT(3,3);
 
-MHMStokesTest::MHMStokesTest()
+MHMDarcyTest::MHMDarcyTest()
 {
     
     fdim=2; //Dimensão do problema
@@ -56,8 +57,10 @@ MHMStokesTest::MHMStokesTest()
     fmatBCbott_z=-6; //3D normal negativa
     
     //Material do elemento de interface
-    fmatLambda=3; // Multiplier material
+    fmatLambda=9; // Multiplier material
 //    fmatLambdaBC=3;
+
+    fmatFrac=10;
     
     fmatLambdaBC_bott=-11;
     fmatLambdaBC_top=-12;
@@ -104,12 +107,12 @@ MHMStokesTest::MHMStokesTest()
     
 }
 
-MHMStokesTest::~MHMStokesTest()
+MHMDarcyTest::~MHMDarcyTest()
 {
     
 }
 
-void MHMStokesTest::Run()
+void MHMDarcyTest::Run()
 {
     int int_order = fsimData.GetInternalOrder();
     int skeleton_order = fsimData.GetSkeletonOrder();
@@ -134,9 +137,12 @@ void MHMStokesTest::Run()
     TPZVec<int64_t> coarseindex;
     GetElIndexCoarseMesh(gmesh, coarseindex);
     
+    //Fracture
+    //InsertFractureMaterial(gmesh);
+    
     //Refinamento de subelemntos
     SubdomainRefine(nrefs,gmesh,coarseindex);
-    //InsertLowerDimMaterial(gmesh);
+    
     
 #ifdef PZDEBUG
     std::ofstream fileg("MalhaGeo_0.txt"); //Impressão da malha geométrica (formato txt)
@@ -147,13 +153,13 @@ void MHMStokesTest::Run()
     
     //Criando objeto para gerenciar a malha MHM
     TPZAutoPointer<TPZGeoMesh> gmeshpointer(gmesh);
-    TPZMHMStokesMeshControl *StokesControl;
-    StokesControl = new TPZMHMStokesMeshControl(gmeshpointer);
+    TPZMHMeshControl *DarcyControl;
+    DarcyControl = new TPZMHMeshControl(gmeshpointer);
+    DarcyControl->DefinePartitionbyCoarseIndices(coarseindex); //Define the MHM partition by the coarse element indices
     
-    StokesControl->DefinePartitionbyCoarseIndices(coarseindex); //Define the MHM partition by the coarse element indices
     std::set<int> matids;
     matids.insert(fmatID);
-    StokesControl->fMaterialIds = matids;
+    DarcyControl->fMaterialIds = matids;
     matids.clear();
     matids.insert(fmatBCtop);
     matids.insert(fmatBCbott);
@@ -164,36 +170,30 @@ void MHMStokesTest::Run()
         matids.insert(fmatBCbott_z);
     }
     
-    StokesControl->fMaterialBCIds = matids;
-    StokesControl->fBCTractionMatIds[fmatBCtop]=fmatLambdaBC_top;
-    StokesControl->fBCTractionMatIds[fmatBCbott]=fmatLambdaBC_bott;
-    StokesControl->fBCTractionMatIds[fmatBCleft]=fmatLambdaBC_left;
-    StokesControl->fBCTractionMatIds[fmatBCright]=fmatLambdaBC_right;
-    if (f_3Dmesh) {
-        StokesControl->fBCTractionMatIds[fmatBCtop_z]=fmatLambdaBC_top_z;
-        StokesControl->fBCTractionMatIds[fmatBCbott_z]=fmatLambdaBC_bott_z;
-    }
+    DarcyControl->fMaterialBCIds = matids;
     
-    InsertMaterialObjects(StokesControl);
+    InsertMaterialObjects(DarcyControl);
     
-    StokesControl->SetInternalPOrder(int_order);
-    StokesControl->SetSkeletonPOrder(skeleton_order);
+    DarcyControl->SetInternalPOrder(int_order);
+    DarcyControl->SetSkeletonPOrder(skeleton_order);
     
-    StokesControl->DivideSkeletonElements(0); //Insere material id do skeleton wrap
+    DarcyControl->DivideSkeletonElements(0); //Insere material id do skeleton wrap
 
-    
+    //std::vector<int> fracture_ids(1);
+    //fracture_ids[0] = fmatFrac;
+    //BreakH1Connectivity(DarcyControl->CMesh(),fracture_ids); //Open conect in the fracture
     //if (fsimData.GetNInterRefs()>0) {
-    StokesControl->SetCoarseAverageMultipliers(true);
+    //    DarcyControl->SetCoarseAverageMultipliers(true);
     //}
-
+    
 
     //Malha computacional
-    StokesControl->BuildComputationalMesh(0);
+    DarcyControl->BuildComputationalMesh(0);
     
 #ifdef PZDEBUG
     std::ofstream fileg1("MalhaGeo_1.txt"); //Impressão da malha geométrica (formato txt)
     std::ofstream filegvtk1("MalhaGeo_1.vtk"); //Impressão da malha geométrica (formato vtk)
-    StokesControl->GMesh()->Print(fileg1);
+    DarcyControl->GMesh()->Print(fileg1);
     TPZVTKGeoMesh::PrintGMeshVTK(gmesh, filegvtk1,true);
 #endif
 
@@ -211,45 +211,46 @@ void MHMStokesTest::Run()
 //        cmesh_gM->Print(filecgM);
         
         std::ofstream filecm("MalhaC_MHM.txt");
-        StokesControl->CMesh()->Print(filecm);
+        DarcyControl->CMesh()->Print(filecm);
     }
 #endif
     
     {
         
-        TPZCompMesh *cmeshP = StokesControl->GetMeshes()[1].operator->();
-        std::ofstream outp("Malha_P_MHM.vtk");
+//        TPZCompMesh *cmeshP = DarcyControl->GetMeshes()[1].operator->();
+//        std::ofstream outp("Malha_P_MHM.vtk");
+//        cmeshP->LoadReferences();
+//        TPZVTKGeoMesh::PrintCMeshVTK(cmeshP, outp, false);
+        
+//        TPZCompMesh *cmeshP = DarcyControl->GetMeshes()[0].operator->();
+        TPZCompMesh *cmeshP = DarcyControl->CMesh().operator->();
+        std::ofstream outv("MalhaC_P_MHM.vtk");
         cmeshP->LoadReferences();
-        TPZVTKGeoMesh::PrintCMeshVTK(cmeshP, outp, false);
+        TPZVTKGeoMesh::PrintCMeshVTK(cmeshP, outv, false);
         
-        TPZCompMesh *cmeshV = StokesControl->GetMeshes()[0].operator->();
-        std::ofstream outv("MalhaC_V_MHM.vtk");
-        cmeshV->LoadReferences();
-        TPZVTKGeoMesh::PrintCMeshVTK(cmeshV, outv, false);
-        
-        TPZCompMesh *cmeshM = StokesControl->CMesh().operator->();
-        std::ofstream out("MalhaC_MHM.vtk");
-        cmeshM->LoadReferences();
-        TPZVTKGeoMesh::PrintCMeshVTK(cmeshM, out, false);
+//        TPZCompMesh *cmeshM = DarcyControl->CMesh().operator->();
+//        std::ofstream out("MalhaC_MHM.vtk");
+//        cmeshM->LoadReferences();
+//        TPZVTKGeoMesh::PrintCMeshVTK(cmeshM, out, false);
         
     }
     
     
    
     std::cout << "MHM Hdiv Computational meshes created\n";
-    std::cout << "Number of equations MHMStokes " << StokesControl->CMesh()->NEquations() << std::endl;
+    std::cout << "Number of equations MHMDarcy " << DarcyControl->CMesh()->NEquations() << std::endl;
     std::string configuration;
     
-    std::stringstream MHMStokesPref;
-    MHMStokesPref << "MHMStokes";
+    std::stringstream MHMDarcyPref;
+    MHMDarcyPref << "MHMDarcy";
     
-    SolveProblem(StokesControl->CMesh(), StokesControl->GetMeshes(), MHMStokesPref.str());
+    SolveProblem(DarcyControl->CMesh(), DarcyControl->GetMeshes(), MHMDarcyPref.str());
     
     std::cout << "FINISHED!" << std::endl;
     
 }
 
-void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAutoPointer<TPZCompMesh> > compmeshes, std::string prefix){
+void MHMDarcyTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAutoPointer<TPZCompMesh> > compmeshes, std::string prefix){
     
     bool shapetest = fsimData.GetShapeTest();
     //calculo solution
@@ -278,7 +279,7 @@ void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAu
         //        for (int i=37; i<38; i++) {
         //            equ_indexes[i-37] = i;
         //        }
-        std::string name_phi = "MHMStokes_shape.vtk";
+        std::string name_phi = "MHMDarcy_shape.vtk";
         TPZVec<std::string> var_name(2);
         var_name[0]="V";
         var_name[1]="P";
@@ -294,14 +295,13 @@ void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAu
     
 
 #ifdef PZDEBUG
-    if(0)
-    {
-        std::string filename = prefix;
-        filename += "_Global.nb";
-        std::ofstream global(filename.c_str());
-        TPZAutoPointer<TPZStructMatrix> strmat = an.StructMatrix();
-        an.Solver().Matrix()->Print("Kg = ",global,EMathematicaInput);
-        an.Rhs().Print("Fg = ",global,EMathematicaInput);
+    //Imprimir Matriz de rigidez Global:
+    if(1){
+        std::ofstream filestiff("stiffness.txt");
+        an.Solver().Matrix()->Print("K1 = ",filestiff,EMathematicaInput);
+        
+        std::ofstream filerhs("rhs.txt");
+        an.Rhs().Print("R = ",filerhs,EMathematicaInput);
     }
 #endif
 
@@ -326,7 +326,7 @@ void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAu
         ConfigPrint(sout);
         plotfile = sout.str() + "_dim2.vtk";
     }
-    plotfile = "StokesMHMPlot.vtk";
+    plotfile = "DarcyMHMPlot.vtk";
     
     {
         sout_geo << prefix << "Geo_";
@@ -346,15 +346,11 @@ void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAu
     else if(mat->NStateVariables() == 1)
     {
         scalnames.Push("P");
-        vecnames.Push("V");
-        vecnames.Push("f");
-        vecnames.Push("V_exact");
         scalnames.Push("P_exact");
-        scalnames.Push("Div");
     }
     
     an.DefineGraphMesh(cmesh->Dimension(), scalnames, vecnames, plotfile);
-    int resolution = 0;
+    int resolution = 2;
     an.PostProcess(resolution,cmesh->Dimension());
     
     
@@ -365,22 +361,22 @@ void MHMStokesTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAu
     TPZManVector<REAL,6> Errors;
     ofstream ErroOut("Error_Brinkman.txt", std::ofstream::app);
     an.SetExact(Sol_exact);
-    an.SetThreadsForError(3);
+    an.SetThreadsForError(0);
     an.PostProcessError(Errors,false);
     
     ConfigPrint(ErroOut);
     ErroOut <<" " << std::endl;
     //ErroOut <<"Norma H1/HDiv - V = "<< Errors[0] << std::endl;
-    ErroOut <<"Norma L2 - V = "<< Errors[1] << std::endl;
-    ErroOut <<"Semi-norma H1/Hdiv - V = "<< Errors[2] << std::endl;
-    ErroOut <<"Norma L2 - P = "<< Errors[4] << std::endl;
+    ErroOut <<"Norma L2 - P = "<< Errors[0] << std::endl;
+    ErroOut <<"Norma L2 - GradP = "<< Errors[1] << std::endl;
+ //   ErroOut <<"Norma L2 - P = "<< Errors[4] << std::endl;
     ErroOut <<"-------------" << std::endl;
     ErroOut.flush();
     
     
 }
 
-std::ostream &MHMStokesTest::ConfigPrint(std::ostream &out)
+std::ostream &MHMDarcyTest::ConfigPrint(std::ostream &out)
 {
     int int_order = fsimData.GetInternalOrder();
     int skeleton_order = fsimData.GetSkeletonOrder();
@@ -407,7 +403,7 @@ std::ostream &MHMStokesTest::ConfigPrint(std::ostream &out)
 }
 
 
-void MHMStokesTest::Rotate(TPZVec<REAL> &co, TPZVec<REAL> &co_r, bool rotate){
+void MHMDarcyTest::Rotate(TPZVec<REAL> &co, TPZVec<REAL> &co_r, bool rotate){
     
     if (rotate==true) {
         //rotação +
@@ -424,7 +420,7 @@ void MHMStokesTest::Rotate(TPZVec<REAL> &co, TPZVec<REAL> &co_r, bool rotate){
     
 }
 
-void MHMStokesTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
+void MHMDarcyTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
     
     // Inserir elmentos fmatLambda and fmatLambdaBCs
 
@@ -452,7 +448,6 @@ void MHMStokesTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
                     }
                     
 
-                    
                     while (neighbour != gelside) {
                         if (neighbour.Element()->Dimension() == gmesh->Dimension() - 1) {
                             int neigh_matID = neighbour.Element()->MaterialId();
@@ -495,8 +490,44 @@ void MHMStokesTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
 
 }
 
+void MHMDarcyTest::InsertFractureMaterial(TPZGeoMesh *gmesh){
+    
+    // Inserir elmentos fmatLambda and fmatLambdaBCs
+    int64_t nel = gmesh->NElements();
+    for (int64_t el = 0; el<nel; el++) {
+        TPZGeoEl *gel = gmesh->Element(el);
+        if(gel->HasSubElement()&&f_allrefine)
+        {
+            continue;
+        }
+        if (gel->Dimension() != gmesh->Dimension()) {
+            continue;
+        }
+        int nsides = gel->NSides();
+        for (int is = 0; is<nsides; is++) {
 
-bool MHMStokesTest::IsSkellNeighbour(TPZGeoElSide neighbour){
+            TPZGeoElSide gelside(gel,is);
+            TPZGeoElSide neighbour = gelside.Neighbour();
+            
+            if (neighbour == gelside) {
+                continue;
+            }
+            
+            while (neighbour != gelside) {
+                if (neighbour.Element()->Dimension() == gmesh->Dimension()) {
+                    TPZGeoElBC(gelside, fmatFrac);
+                    break;
+                    
+                }
+                neighbour = neighbour.Neighbour();
+                
+            }
+        }
+    }
+    
+}
+
+bool MHMDarcyTest::IsSkellNeighbour(TPZGeoElSide neighbour){
 
     if (neighbour.Element()->Dimension() == f_mesh0->Dimension()) {
         int nskellneighs = f_skellNeighs.NElements();
@@ -517,7 +548,7 @@ bool MHMStokesTest::IsSkellNeighbour(TPZGeoElSide neighbour){
 }
 
 
-TPZGeoMesh *MHMStokesTest::CreateGMesh(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
+TPZGeoMesh *MHMDarcyTest::CreateGMesh(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
 {
     
     int dimmodel = 2;
@@ -572,7 +603,7 @@ TPZGeoMesh *MHMStokesTest::CreateGMesh(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
     
 }
 
-TPZGeoMesh *MHMStokesTest::CreateGMesh3D(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
+TPZGeoMesh *MHMDarcyTest::CreateGMesh3D(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
 {
     
     int dimmodel = 2;
@@ -874,7 +905,7 @@ TPZGeoMesh *MHMStokesTest::CreateGMesh3D(TPZVec<int> &n_div, TPZVec<REAL> &h_s)
     
 }
 
-TPZGeoMesh *MHMStokesTest::CreateGMeshCurve()
+TPZGeoMesh *MHMDarcyTest::CreateGMeshCurve()
 {
     
     TPZGeoMesh * geomesh = new TPZGeoMesh;
@@ -978,7 +1009,7 @@ TPZGeoMesh *MHMStokesTest::CreateGMeshCurve()
     
 }
 
-TPZManVector<REAL,3>  MHMStokesTest::ParametricCircle(REAL radius,REAL theta)
+TPZManVector<REAL,3>  MHMDarcyTest::ParametricCircle(REAL radius,REAL theta)
 {
     TPZManVector<REAL,3> xcoor(3,0.0);
     xcoor[0] = radius * cos(theta);
@@ -987,7 +1018,7 @@ TPZManVector<REAL,3>  MHMStokesTest::ParametricCircle(REAL radius,REAL theta)
     return xcoor;
 }
 
-void MHMStokesTest::TetrahedralMeshCubo(TPZVec<int> &n_s){
+void MHMDarcyTest::TetrahedralMeshCubo(TPZVec<int> &n_s){
     
 //    TPZGeoMesh *gmesh = new TPZGeoMesh;
 //    GenerateNodes(gmesh,nelem);
@@ -998,8 +1029,28 @@ void MHMStokesTest::TetrahedralMeshCubo(TPZVec<int> &n_s){
     
 }
 
+void MHMDarcyTest::BreakH1Connectivity(TPZCompMesh &cmesh, std::vector<int> fracture_ids)
+{
+    std::set<int> boundaries_ids;
+    boundaries_ids.insert(fmatBCbott);
+    boundaries_ids.insert(fmatBCleft);
+    boundaries_ids.insert(fmatBCtop);
+    boundaries_ids.insert(fmatBCright);
+    
+    for (unsigned int i_f = 0; i_f <  fracture_ids.size(); i_f++) {
+        TPZFractureInsertion fracture(cmesh.Reference(),fracture_ids[i_f],boundaries_ids);
+        fracture.ClassifyNeighboursofPivots();
+        fracture.OpenFractureOnH1(&cmesh); // (ok)
+        fracture.SetDiscontinuosFrac(&cmesh); // (ok)
+        //fracture.SetInterfaces(&cmesh, fmatInterfaceLeft[i_f], fmatInterfaceRight[i_f]);
+        //fractureInsert[i_f]=fracture;
+    }
+    cmesh.ComputeNodElCon();
+    
+}
 
-void MHMStokesTest::SubdomainRefine(int nrefine, TPZGeoMesh *gmesh, TPZVec<int64_t> &coarseindices){
+
+void MHMDarcyTest::SubdomainRefine(int nrefine, TPZGeoMesh *gmesh, TPZVec<int64_t> &coarseindices){
     
     int ncoarse = coarseindices.size();
     TPZManVector< TPZGeoEl *,20 > filhos;
@@ -1054,7 +1105,7 @@ void MHMStokesTest::SubdomainRefine(int nrefine, TPZGeoMesh *gmesh, TPZVec<int64
 
 
 
-void MHMStokesTest::UniformRefine4(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> centerCo, bool restriction)
+void MHMDarcyTest::UniformRefine4(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> centerCo, bool restriction)
 {
     
     int dim = gmesh->Dimension();
@@ -1110,7 +1161,7 @@ void MHMStokesTest::UniformRefine4(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> cen
 }
 
 
-void MHMStokesTest::UniformRefine3(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_div)
+void MHMDarcyTest::UniformRefine3(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_div)
 {
     
     int dim = gmesh->Dimension();
@@ -1171,7 +1222,7 @@ void MHMStokesTest::UniformRefine3(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_d
 }
 
 
-void MHMStokesTest::UniformRefine2(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_div)
+void MHMDarcyTest::UniformRefine2(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_div)
 {
     
     int dim = gmesh->Dimension();
@@ -1233,7 +1284,7 @@ void MHMStokesTest::UniformRefine2(int nDiv, TPZGeoMesh *gmesh, TPZVec<int> &n_d
 
 
 
-void MHMStokesTest::UniformRefine(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> centerCo, bool restriction)
+void MHMDarcyTest::UniformRefine(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> centerCo, bool restriction)
 {
     
     int dim = gmesh->Dimension();
@@ -1290,298 +1341,33 @@ void MHMStokesTest::UniformRefine(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> cent
     gmesh->BuildConnectivity();
 }
 
-TPZCompEl *MHMStokesTest::CreateInterfaceEl(TPZGeoEl *gel,TPZCompMesh &mesh,int64_t &index) {
+TPZCompEl *MHMDarcyTest::CreateInterfaceEl(TPZGeoEl *gel,TPZCompMesh &mesh,int64_t &index) {
     if(!gel->Reference() && gel->NumInterfaces() == 0)
         return new TPZInterfaceElement(mesh,gel,index);
     
     return NULL;
 }
 
-void MHMStokesTest::Sol_exact(const TPZVec<REAL> &x, TPZVec<STATE> &sol, TPZFMatrix<STATE> &dsol){
+void MHMDarcyTest::Sol_exact(const TPZVec<REAL> &x, TPZVec<STATE> &sol, TPZFMatrix<STATE> &dsol){
     
-//        dsol.Resize(3,3);
-//        sol.Resize(4);
-//
-//        REAL x1 = x[0];
-//        REAL x2 = x[1];
-//
-//        TPZVec<REAL> v_Dirichlet(3,0.);
-//
-////        v_Dirichlet[0] = -0.1*x2*x2+0.2*x2;
-//        v_Dirichlet[0] = -1.+x2;
-////        v_Dirichlet[0] = 1.;
-//        v_Dirichlet[1] = 0.;
-//        v_Dirichlet[2] = 0.;
-//
-////        STATE pressure = 1.-0.2*x1;
+        sol.Resize(1);
+
+        REAL x1 = x[0];
+        REAL x2 = x[1];
+
+//        STATE pressure = 1.-0.2*x1;
 //        STATE pressure = 0.;
-//
-//        sol[0]=v_Dirichlet[0];
-//        sol[1]=v_Dirichlet[1];
-//        sol[2]=v_Dirichlet[2];
-//        sol[3]=pressure;
-//
-//        // vx direction
-//        dsol(0,0)= 0.;
-////        dsol(0,1)= 0.2-0.2*x2;
-//        dsol(0,1)= 1.;
-//        //dsol(0,1)= 0.;
-//        dsol(0,2)= 0.;
-//
-//        // vy direction
-//        dsol(1,0)= 0.;
-//        dsol(1,1)= 0.;
-//        dsol(1,2)= 0.;
-//
-//        // vz direction
-//        dsol(2,0)= 0.;
-//        dsol(2,1)= 0.;
-//        dsol(2,2)= 0.;
-    
-    // General form : : Artigo Botti, Di Pietro, Droniou
-    
-    //    dsol.Resize(3,3);
-    //    sol.Resize(3);
-    //
-    //    REAL x1 = x[0];
-    //    REAL x2 = x[1];
-    //
-    //    REAL m_v= 1., m_u= 1.0;
-    //
-    //    REAL Cf=m_v/m_u;
-    //
-    //    STATE v_1 = -exp(-Cf)*sin(x1)*sin(x2)+(1./m_v)*(1.-exp(-Cf))*sin(x1)*sin(x2);
-    //    STATE v_2 = -exp(-Cf)*cos(x1)*cos(x2)-(1./m_v)*(1.-exp(-Cf))*cos(x1)*cos(x2);
-    //    STATE pressure= cos(x1)*sin(x2);
-    //
-    //    sol[0]=v_1;
-    //    sol[1]=v_2;
-    //    sol[2]=pressure;
-    //
-    //    // vx direction
-    //    dsol(0,0)= -exp(-Cf)*cos(x1)*sin(x2)+(1./m_v)*(1.-exp(-Cf))*cos(x1)*sin(x2);
-    //    dsol(0,1)= exp(-Cf)*cos(x2)*sin(x1)+(1./m_v)*(1.-exp(-Cf))*cos(x2)*sin(x1);
-    //
-    //    // vy direction
-    //    dsol(1,0)= -exp(-Cf)*cos(x2)*sin(x1)+(1./m_v)*(1.-exp(-Cf))*cos(x2)*sin(x1);
-    //    dsol(1,1)= exp(-Cf)*cos(x1)*sin(x2)+(1./m_v)*(1.-exp(-Cf))*cos(x1)*sin(x2);
-    //
-
-    
-    
-    // Brinkman : : Artigo Botti, Di Pietro, Droniou
-    
-    //    dsol.Resize(3,3);
-    //    sol.Resize(3);
-    //
-    //    REAL x1 = x[0];
-    //    REAL x2 = x[1];
-    //
-    //    REAL e = exp(1.);
-    //
-    //    STATE v_1 = (1.-2./e)*sin(x1)*sin(x2);
-    //    STATE v_2 = -1.*cos(x1)*cos(x2);
-    //    STATE pressure= cos(x1)*sin(x2);
-    //
-    //    sol[0]=v_1;
-    //    sol[1]=v_2;
-    //    sol[2]=pressure;
-    //
-    //    // vx direction
-    //    dsol(0,0)= (1.-2./e)*cos(x1)*sin(x2);
-    //    dsol(0,1)= cos(x2)*sin(x1);
-    //
-    //    // vy direction
-    //    dsol(1,0)= (1.-2./e)*cos(x2)*sin(x1);
-    //    dsol(1,1)= cos(x1)*sin(x2);
-    //
-
-    
-    // Stokes : : Artigo Botti, Di Pietro, Droniou
-    
-    dsol.Resize(3,3);
-    sol.Resize(4);
-
-
-    //Applying rotation:
-    TPZVec<REAL> x_in = x;
-    TPZVec<REAL> x_rot(3,0.);
-
-    f_InvT.Apply(x_in,x_rot);
-    x[0] = x_rot[0];
-    x[1] = x_rot[1];
-
-    REAL x1 = x[0];
-    REAL x2 = x[1];
-
-    REAL e = exp(1.);
-
-    TPZVec<REAL> v_Dirichlet(3,0.), vbc_rot(3,0.);
-
-    v_Dirichlet[0] = -1.*sin(x1)*sin(x2);
-    v_Dirichlet[1] = -1.*cos(x1)*cos(x2);
     STATE pressure= cos(x1)*sin(x2);
-
-    f_T.Apply(v_Dirichlet, vbc_rot);
-    v_Dirichlet = vbc_rot;
-
-    sol[0]=v_Dirichlet[0];
-    sol[1]=v_Dirichlet[1];
-    sol[2]=v_Dirichlet[2];
-    sol[3]=pressure;
-
-
-    // GradU * Rt
-    TPZFMatrix<STATE> GradU(3,3,0.), GradURt(3,3,0.), RGradURt(3,3,0.);
-
-    // vx direction
-    GradU(0,0)= -1.*cos(x1)*sin(x2);
-    GradU(0,1)= cos(x2)*sin(x1);
-
-    // vy direction
-    GradU(1,0)= -1.*cos(x2)*sin(x1);
-    GradU(1,1)= cos(x1)*sin(x2);
-
-    TPZFMatrix<STATE> R = f_T.Mult();
-    TPZFMatrix<STATE> Rt(3,3,0.);
-    R.Transpose(&Rt);
-
-//    GradU.Print("GradU = ");
-//    R.Print("R = ");
-//    Rt.Print("Rt = ");
-
-    GradU.Multiply(Rt,GradURt);
-//    GradURt.Print("GradURt = ");
-
-    R.Multiply(GradURt,RGradURt);
-//    RGradURt.Print("RGradURt = ");
-
-    // vx direction
-    dsol(0,0)= RGradURt(0,0);
-    dsol(0,1)= RGradURt(0,1);
-    dsol(0,2)= RGradURt(0,2);
-
-    // vy direction
-    dsol(1,0)= RGradURt(1,0);
-    dsol(1,1)= RGradURt(1,1);
-    dsol(1,2)= RGradURt(1,2);
-
-    // vz direction
-    dsol(2,0)= RGradURt(2,0);
-    dsol(2,1)= RGradURt(2,1);
-    dsol(2,2)= RGradURt(2,2);
     
-    // Darcy : : Artigo Botti, Di Pietro, Droniou
-    
-    //        dsol.Resize(3,3);
-    //        sol.Resize(3);
-    //
-    //        REAL x1 = x[0];
-    //        REAL x2 = x[1];
-    //
-    //        STATE v_1 = sin(x1)*sin(x2);
-    //        STATE v_2 = -1.*cos(x1)*cos(x2);
-    //        STATE pressure= cos(x1)*sin(x2);
-    //
-    //        sol[0]=v_1;
-    //        sol[1]=v_2;
-    //        sol[2]=pressure;
-    //
-    //        // vx direction
-    //        dsol(0,0)= cos(x1)*sin(x2);
-    //        dsol(0,1)= cos(x2)*sin(x1);
-    //
-    //        // vy direction
-    //        dsol(1,0)= cos(x2)*sin(x1);
-    //        dsol(1,1)= cos(x1)*sin(x2);
-    
+    sol[0]=pressure;
 
-    
-    // Stokes 3D : Artigo Botti, Di Pietro, Droniou
-    
-//        dsol.Resize(3,3);
-//        sol.Resize(4);
-//
-//        //Applying rotation:
-//        TPZVec<REAL> x_in = x;
-//        TPZVec<REAL> x_rot(3,0.);
-//
-//        f_InvT.Apply(x_in,x_rot);
-//        x[0] = x_rot[0];
-//        x[1] = x_rot[1];
-//
-//        REAL x1 = x[0];
-//        REAL x2 = x[1];
-//        REAL x3 = x[2];
-//
-//        TPZVec<REAL> v_Dirichlet(3,0.), vbc_rot(3,0.);
-//
-//        v_Dirichlet[0] = cos(x1)*cos(x3) -1.*sin(x1)*sin(x2);
-//        v_Dirichlet[1] = -1.*cos(x1)*cos(x2);
-//        v_Dirichlet[2] = sin(x1)*sin(x3);
-//        STATE pressure= cos(x1)*sin(x2)*cos(x3);
-//
-//        f_T.Apply(v_Dirichlet, vbc_rot);
-//        v_Dirichlet = vbc_rot;
-//
-//        sol[0]=v_Dirichlet[0];
-//        sol[1]=v_Dirichlet[1];
-//        sol[2]=v_Dirichlet[2];
-//        sol[3]=pressure;
-//
-//
-//        // GradU * Rt
-//        TPZFMatrix<STATE> GradU(3,3,0.), GradURt(3,3,0.), RGradURt(3,3,0.);
-//
-//        // vx direction
-//        GradU(0,0)= -cos(x3)*sin(x1)-1.*cos(x1)*sin(x2);
-//        GradU(0,1)= cos(x2)*sin(x1);
-//        GradU(0,2)= cos(x1)*sin(x3);
-//
-//        // vy direction
-//        GradU(1,0)= -1.*cos(x2)*sin(x1);
-//        GradU(1,1)= cos(x1)*sin(x2);
-//        GradU(1,2)= 0.;
-//
-//        // vz direction
-//        GradU(2,0)= -1.*cos(x1)*sin(x3);
-//        GradU(2,1)= 0.;
-//        GradU(2,2)= cos(x3)*sin(x1);
-//
-//
-//        TPZFMatrix<STATE> R = f_T.Mult();
-//        TPZFMatrix<STATE> Rt(3,3,0.);
-//        R.Transpose(&Rt);
-//
-//    //    GradU.Print("GradU = ");
-//    //    R.Print("R = ");
-//    //    Rt.Print("Rt = ");
-//
-//        GradU.Multiply(Rt,GradURt);
-//    //    GradURt.Print("GradURt = ");
-//
-//        R.Multiply(GradURt,RGradURt);
-//    //    RGradURt.Print("RGradURt = ");
-//
-//        // vx direction
-//        dsol(0,0)= RGradURt(0,0);
-//        dsol(0,1)= RGradURt(0,1);
-//        dsol(0,2)= RGradURt(0,2);
-//
-//        // vy direction
-//        dsol(1,0)= RGradURt(1,0);
-//        dsol(1,1)= RGradURt(1,1);
-//        dsol(1,2)= RGradURt(1,2);
-//
-//        // vz direction
-//        dsol(2,0)= RGradURt(2,0);
-//        dsol(2,1)= RGradURt(2,1);
-//        dsol(2,2)= RGradURt(2,2);
+
+
     
     
 }
 
-void MHMStokesTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix<STATE>& gradu){
+void MHMDarcyTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix<STATE>& gradu){
     
     //Applying rotation:
     TPZVec<REAL> x_in = x;
@@ -1591,14 +1377,14 @@ void MHMStokesTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix
     x[0] = x_rot[0];
     x[1] = x_rot[1];
     
-    f.resize(3);
+    f.resize(1);
     REAL x1 = x[0];
     REAL x2 = x[1];
-    REAL x3 = x[2];
+
     
-    f[0] =0.;
-    f[1] =0.;
-    f[2] =0.;
+    STATE f_source = 2.*cos(x1)*sin(x2);
+    
+    f[0] = f_source;
     
     TPZVec<REAL> f_s(3,0), f_rot(3,0);
     
@@ -1632,19 +1418,19 @@ void MHMStokesTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix
     //
     //    f[2] = g_1; // g source
     
-    // Stokes : : Artigo Botti, Di Pietro, Droniou
+    // Darcy : : Artigo Botti, Di Pietro, Droniou
     
     
-    f_s[0] = -3.*sin(x1)*sin(x2);
-    f_s[1] = -1.*cos(x1)*cos(x2);
-
-    f_T.Apply(f_s, f_rot);
-    f_s = f_rot;
-
-
-    f[0] = f_s[0]; // x direction
-    f[1] = f_s[1]; // y direction
-    f[2] = f_s[2];
+//    f_s[0] = -3.*sin(x1)*sin(x2);
+//    f_s[1] = -1.*cos(x1)*cos(x2);
+//
+//    f_T.Apply(f_s, f_rot);
+//    f_s = f_rot;
+//
+//
+//    f[0] = f_s[0]; // x direction
+//    f[1] = f_s[1]; // y direction
+//    f[2] = f_s[2];
     
     
     // Darcy : : Artigo Botti, Di Pietro, Droniou
@@ -1657,7 +1443,7 @@ void MHMStokesTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix
     //        f[2] = 2.*cos(x1)*sin(x2);
     
     
-    // Stokes 3D : Artigo Botti, Di Pietro, Droniou
+    // Darcy 3D : Artigo Botti, Di Pietro, Droniou
     
     
 //        f_s[0] = 2.*cos(x1)*cos(x3) - 1.*(2. + cos(x3))*sin(x1)*sin(x2);
@@ -1674,7 +1460,7 @@ void MHMStokesTest::F_source(const TPZVec<REAL> &x, TPZVec<STATE> &f, TPZFMatrix
     
 }
 
-void MHMStokesTest::ChangeExternalOrderConnects(TPZCompMesh *mesh, int addToOrder){
+void MHMDarcyTest::ChangeExternalOrderConnects(TPZCompMesh *mesh, int addToOrder){
     
     int nEl= mesh-> NElements();
     int dim = mesh->Dimension();
@@ -1722,13 +1508,13 @@ void MHMStokesTest::ChangeExternalOrderConnects(TPZCompMesh *mesh, int addToOrde
     mesh->ExpandSolution();
 }
 
-void MHMStokesTest::InsertMaterialObjects(TPZMHMeshControl *control)
+void MHMDarcyTest::InsertMaterialObjects(TPZMHMeshControl *control)
 {
 
     TPZCompMesh &cmesh = control->CMesh();
 
     REAL visco = fsimData.GetViscosity();
-    TPZMHMBrinkmanMaterial *mat1 = new TPZMHMBrinkmanMaterial(fmatID,fdim,1,visco,0,0);
+    TPZMHMDarcyDFNMaterial *mat1 = new TPZMHMDarcyDFNMaterial(fmatID,fdim,1,visco,0,0);
     
     TPZAutoPointer<TPZFunction<STATE> > fp = new TPZDummyFunction<STATE> (F_source, 9);
     TPZAutoPointer<TPZFunction<STATE> > solp = new TPZDummyFunction<STATE> (Sol_exact,9);
@@ -1751,20 +1537,17 @@ void MHMStokesTest::InsertMaterialObjects(TPZMHMeshControl *control)
     control->SwitchLagrangeMultiplierSign(false);
     ///Inserir condicao de contorno
     TPZFMatrix<STATE> val1(3,3,0.), val2(3,1,0.);
-
+    
     TPZBndCond * BCondD1 = mat1->CreateBC(mat1, fmatBCbott, fneumann, val1, val2);
     BCondD1->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD1);
     //control->fMaterialBCIds.insert(fmatBCbott);
     
-    val1.Zero();
     TPZBndCond * BCondD2 = mat1->CreateBC(mat1, fmatBCtop, fneumann, val1, val2);
     BCondD2->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD2);
     //control->fMaterialBCIds.insert(fmatBCtop);
     
-    val1.Zero();
-    val2.Zero();
     TPZBndCond * BCondD3 = mat1->CreateBC(mat1, fmatBCleft, fneumann, val1, val2);
     BCondD3->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD3);
@@ -1789,50 +1572,50 @@ void MHMStokesTest::InsertMaterialObjects(TPZMHMeshControl *control)
     //Skeleton::
     
     
-    TPZBndCond * bcFlux = mat1->CreateBC(mat1, matSkeleton, fneumann, val1, val2);
-    //bcFlux->SetBCForcingFunction(0, solp);
-    cmesh.InsertMaterialObject(bcFlux);
+//    TPZBndCond * bcFlux = mat1->CreateBC(mat1, matSkeleton, fneumann, val1, val2);
+//    //bcFlux->SetBCForcingFunction(0, solp);
+//    cmesh.InsertMaterialObject(bcFlux);
     
     
     
     // 2.1 - Material para tração tangencial 1D (Interior)
-    TPZNullMaterial *matLambda = new TPZNullMaterial(fmatLambda);
-    matLambda->SetDimension(fdim-1);
-    matLambda->SetNStateVariables(1);
-    control->CMesh()->InsertMaterialObject(matLambda);
+//    TPZNullMaterial *matLambda = new TPZNullMaterial(fmatLambda);
+//    matLambda->SetDimension(fdim-1);
+//    matLambda->SetNStateVariables(1);
+//    control->CMesh()->InsertMaterialObject(matLambda);
  //   control->fMaterialIds.insert(fmatLambda);
     
     
     // 2.2 - Material for interfaces (Interior)
-    TPZMHMBrinkmanMaterial *matInterfaceLeft = new TPZMHMBrinkmanMaterial(control->fLagrangeMatIdLeft,fdim,1,visco,0,0);
-    matInterfaceLeft->SetMultiplier(1.);
-    cmesh.InsertMaterialObject(matInterfaceLeft);
+//    TPZMHMDarcyDFNMaterial *matInterfaceLeft = new TPZMHMDarcyDFNMaterial(control->fLagrangeMatIdLeft,fdim,1,visco,0,0);
+//    matInterfaceLeft->SetMultiplier(1.);
+//    cmesh.InsertMaterialObject(matInterfaceLeft);
  //   control->fLagrangeMatIdLeft=fmatInterfaceLeft;
     
-    TPZMHMBrinkmanMaterial *matInterfaceRight = new TPZMHMBrinkmanMaterial(control->fLagrangeMatIdRight,fdim,1,visco,0,0);
-    matInterfaceRight->SetMultiplier(-1.);
-    cmesh.InsertMaterialObject(matInterfaceRight);
+//    TPZMHMDarcyDFNMaterial *matInterfaceRight = new TPZMHMDarcyDFNMaterial(control->fLagrangeMatIdRight,fdim,1,visco,0,0);
+//    matInterfaceRight->SetMultiplier(-1.);
+//    cmesh.InsertMaterialObject(matInterfaceRight);
  //   control->fLagrangeMatIdRight=fmatInterfaceRight;
     
     // 3.1 - Material para tração tangencial 1D nos contornos
-    TPZBndCond *matLambdaBC_bott = mat1->CreateBC(mat1, fmatLambdaBC_bott, fneumann, val1, val2);
-    matLambdaBC_bott->SetBCForcingFunction(0, solp);
-    cmesh.InsertMaterialObject(matLambdaBC_bott);
+//    TPZBndCond *matLambdaBC_bott = mat1->CreateBC(mat1, fmatLambdaBC_bott, fneumann, val1, val2);
+//    matLambdaBC_bott->SetBCForcingFunction(0, solp);
+//    cmesh.InsertMaterialObject(matLambdaBC_bott);
  //   control->fMaterialBCIds.insert(fmatLambdaBC_bott);
     
-    TPZBndCond *matLambdaBC_top = mat1->CreateBC(mat1, fmatLambdaBC_top, fneumann, val1, val2);
-    matLambdaBC_top->SetBCForcingFunction(0, solp);
-    cmesh.InsertMaterialObject(matLambdaBC_top);
+//    TPZBndCond *matLambdaBC_top = mat1->CreateBC(mat1, fmatLambdaBC_top, fneumann, val1, val2);
+//    matLambdaBC_top->SetBCForcingFunction(0, solp);
+//    cmesh.InsertMaterialObject(matLambdaBC_top);
  //   control->fMaterialBCIds.insert(fmatLambdaBC_top);
     
-    TPZBndCond *matLambdaBC_left = mat1->CreateBC(mat1, fmatLambdaBC_left, fneumann, val1, val2);
-    matLambdaBC_left->SetBCForcingFunction(0, solp);
-    cmesh.InsertMaterialObject(matLambdaBC_left);
+//    TPZBndCond *matLambdaBC_left = mat1->CreateBC(mat1, fmatLambdaBC_left, fneumann, val1, val2);
+//    matLambdaBC_left->SetBCForcingFunction(0, solp);
+//    cmesh.InsertMaterialObject(matLambdaBC_left);
  //   control->fMaterialBCIds.insert(fmatLambdaBC_left);
     
-    TPZBndCond *matLambdaBC_right = mat1->CreateBC(mat1, fmatLambdaBC_right, fneumann, val1, val2);
-    matLambdaBC_right->SetBCForcingFunction(0, solp);
-    cmesh.InsertMaterialObject(matLambdaBC_right);
+//    TPZBndCond *matLambdaBC_right = mat1->CreateBC(mat1, fmatLambdaBC_right, fneumann, val1, val2);
+//    matLambdaBC_right->SetBCForcingFunction(0, solp);
+//    cmesh.InsertMaterialObject(matLambdaBC_right);
  //   control->fMaterialBCIds.insert(fmatLambdaBC_right);
     
     if (f_3Dmesh) {
@@ -1848,7 +1631,7 @@ void MHMStokesTest::InsertMaterialObjects(TPZMHMeshControl *control)
 }
 
 
-void MHMStokesTest::InsertInterfaces(TPZMultiphysicsCompMesh *cmesh_m){
+void MHMDarcyTest::InsertInterfaces(TPZMultiphysicsCompMesh *cmesh_m){
     
     std::set<int> boundaries_ids;
     boundaries_ids.insert(fmatBCbott);
@@ -1890,7 +1673,7 @@ void MHMStokesTest::InsertInterfaces(TPZMultiphysicsCompMesh *cmesh_m){
     
 }
 
-void MHMStokesTest::ComputeSkelNeighbours(){
+void MHMDarcyTest::ComputeSkelNeighbours(){
     
     if (!f_mesh0) {
         DebugStop();
@@ -1929,7 +1712,7 @@ void MHMStokesTest::ComputeSkelNeighbours(){
 }
 
 
-void MHMStokesTest::GroupAndCondense(TPZMultiphysicsCompMesh *cmesh_m){
+void MHMDarcyTest::GroupAndCondense(TPZMultiphysicsCompMesh *cmesh_m){
    
     
     //Criando apropamento de elementos
@@ -2043,7 +1826,7 @@ void MHMStokesTest::GroupAndCondense(TPZMultiphysicsCompMesh *cmesh_m){
 }
 
 
-void MHMStokesTest::GetElIndexCoarseMesh(TPZGeoMesh *gmesh, TPZVec<int64_t> &coarseindex)
+void MHMDarcyTest::GetElIndexCoarseMesh(TPZGeoMesh *gmesh, TPZVec<int64_t> &coarseindex)
 {
     int nel = gmesh->NElements();
     int iel;

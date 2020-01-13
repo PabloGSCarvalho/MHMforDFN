@@ -16,6 +16,7 @@
 #include "HybridBrinkmanTest.h"
 #include "NavierStokesTest.h"
 #include "MHMStokesTest.h"
+#include "MHMDarcyTest.h"
 #include "tpzarc3d.h"
 #include "tpzgeoblend.h"
 #include "pzgengrid.h"
@@ -60,9 +61,9 @@ const REAL Pi=M_PI;
 
 const REAL visco=1., permeability=1., theta=-1.; //Coeficientes: viscosidade, permeabilidade, fator simetria
 
-bool StokesDomain = false , BrinkmanDomain = false;
+bool HybridBrinkmanDomain = false, MHMStokesDomain = false, NavierStokesDomain = false;
 
-bool HybridBrinkmanDomain = false, MHMStokesDomain = true, NavierStokesDomain = false;
+bool MHMDarcyDFN = true;
 
 int main(int argc, char *argv[])
 {
@@ -83,9 +84,49 @@ int main(int argc, char *argv[])
     
     TPZVec<REAL> h_s(3,0);
     h_s[0]=2.,h_s[1]=2.,h_s[2]=2.; //Dimensões em x e y do domínio
-    
-    if (MHMStokesDomain)
+
+    if (MHMDarcyDFN)
     {
+        
+        for (int it=0; it<=0; it++) {
+            //h_level = pow(2., 1+it);
+            h_level = 32;
+            TPZVec<int> n_s(3,0.);
+            //n_s[0]=2,n_s[1]=1;
+           
+            n_s[0]=h_level,n_s[1]=h_level;
+            
+            MHMDarcyTest  * Test2 = new MHMDarcyTest();
+            //Test2->Set3Dmesh();
+            //Test2->SetElType(ECube);
+            //Test2->SetHdivPlus();
+            
+            TPZTransform<STATE> Transf(3,3), InvTransf(3,3);
+            Test2->SetTransform(Transf, InvTransf);
+            
+            REAL rot_x = 5.;
+            REAL rot_z = 44.;
+            REAL rot_y = -85.;
+            rot_z = rot_z*Pi/180.;
+            rot_y = rot_y*Pi/180.;
+            rot_z = rot_z*Pi/180.;
+            
+            //Test2->SetRotation3DMatrix(rot_x,rot_y,rot_z);
+            TPZSimulationData simdata;
+            simdata.SetInternalOrder(2);
+            simdata.SetSkeletonOrder(1);
+            simdata.SetCoarseDivisions(n_s);
+            simdata.SetDomainSize(h_s);
+            simdata.SetNInterRefs(0);
+            simdata.SetViscosity(1.);
+            simdata.SetNthreads(0);
+            //simdata.SetShapeTest(); // Test for shape functions
+            
+            Test2->SetSimulationData(simdata);
+            Test2->Run();
+        }
+    }
+    else if (MHMStokesDomain){
         
         for (int it=0; it<=0; it++) {
             //h_level = pow(2., 1+it);
