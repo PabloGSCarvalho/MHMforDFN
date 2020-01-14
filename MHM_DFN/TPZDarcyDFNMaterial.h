@@ -145,12 +145,21 @@ public:
     /** returns the solution associated with the var index based on
      * the finite element approximation */
     void Solution(TPZMaterialData &datavec, int var, TPZVec<STATE> &Solout);
+
     
-    /** index of velocity */
-    int VIndex(){ return 0; }
+    /** returns the solution associated with the var index based on
+     * the finite element approximation */
+    void Solution(TPZVec<TPZMaterialData> &datavec, int var, TPZVec<STATE> &Solout);
+
     
     /** index of pressure */
-    int PIndex(){ return 1; }
+    int PIndex(){ return 0; }
+
+    /** index of Lambda */
+    int LambdaIndex(){ return 1; }
+
+    /** index of average pressure */
+    int AveragePIndex(){ return 2; }
     
     /** inner product of two tensors. See Gurtin (2003), p. 5. */
     template <class TVar>
@@ -175,9 +184,8 @@ public:
     virtual void Contribute(TPZMaterialData &datavec, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef);
     
     // Contribute Methods being used - Multiphysics
-    virtual void Contribute(TPZVec<TPZMaterialData> &datavec, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef){
-        DebugStop();
-    }
+    virtual void Contribute(TPZVec<TPZMaterialData> &datavec, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef);
+
     
     virtual void ContributeInterface(TPZMaterialData &data, TPZMaterialData &dataleft, TPZMaterialData &dataright, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef){
         DebugStop();
@@ -218,7 +226,9 @@ public:
      * @param bc[in] is the boundary condition material
      * @since April 16, 2007
      */
-    virtual void ContributeBCInterface(TPZMaterialData &data, TPZVec<TPZMaterialData> &datavecleft, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef, TPZBndCond &bc);
+    virtual void ContributeBCInterface(TPZMaterialData &data, TPZVec<TPZMaterialData> &datavecleft, REAL weight, TPZFMatrix<STATE> &ek, TPZFMatrix<STATE> &ef, TPZBndCond &bc){
+        DebugStop();
+    }
     
     /**
      * It computes a contribution to the stiffness matrix and load vector at one internal interface integration point.
@@ -229,7 +239,9 @@ public:
      * @param bc[in] is the boundary condition material
      * @since April 16, 2007
      */
-    virtual void ContributeInterface(TPZMaterialData &data, TPZVec<TPZMaterialData> &datavecleft, TPZVec<TPZMaterialData> &datavecright, REAL weight, TPZFMatrix<STATE> &ek,TPZFMatrix<STATE> &ef);
+    virtual void ContributeInterface(TPZMaterialData &data, TPZVec<TPZMaterialData> &datavecleft, TPZVec<TPZMaterialData> &datavecright, REAL weight, TPZFMatrix<STATE> &ek,TPZFMatrix<STATE> &ef){
+        DebugStop();
+    }
     
     
     /**

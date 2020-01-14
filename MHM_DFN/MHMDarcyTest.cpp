@@ -178,6 +178,9 @@ void MHMDarcyTest::Run()
     DarcyControl->SetSkeletonPOrder(skeleton_order);
     
     DarcyControl->DivideSkeletonElements(0); //Insere material id do skeleton wrap
+    bool Add_LagrangeAverageP = true;
+    DarcyControl->SetLagrangeAveragePressure(Add_LagrangeAverageP);
+    
 
     //std::vector<int> fracture_ids(1);
     //fracture_ids[0] = fmatFrac;
@@ -202,10 +205,12 @@ void MHMDarcyTest::Run()
     {
         //Impressão da malha computacional da velocidade (formato txt)
 //        std::ofstream filecv("MalhaC_v.txt");
-//        std::ofstream filecp("MalhaC_p.txt");
 //        std::ofstream filecpM("MalhaC_pM.txt");
 //        std::ofstream filecgM("MalhaC_gM.txt");
 //        cmesh_v->Print(filecv);
+        
+        
+        
 //        cmesh_p->Print(filecp);
 //        cmesh_pM->Print(filecpM);
 //        cmesh_gM->Print(filecgM);
@@ -216,17 +221,32 @@ void MHMDarcyTest::Run()
 #endif
     
     {
+
+        if (Add_LagrangeAverageP) {
+            TPZCompMesh *cmeshP = DarcyControl->GetMeshes()[0].operator->();
+            std::ofstream filecpress("Malha_P_MHM.txt");
+            cmeshP->Print(filecpress);
+            
+            TPZCompMesh *cmeshL = DarcyControl->GetMeshes()[1].operator->();
+            std::ofstream filecL("Malha_L_MHM.txt");
+            cmeshL->Print(filecL);
+            
+            TPZCompMesh *cmeshAp = DarcyControl->GetMeshes()[2].operator->();
+            std::ofstream filecAp("MalhaC_pM.txt");
+            cmeshAp->Print(filecAp);
+        }
         
-//        TPZCompMesh *cmeshP = DarcyControl->GetMeshes()[1].operator->();
+        
 //        std::ofstream outp("Malha_P_MHM.vtk");
 //        cmeshP->LoadReferences();
 //        TPZVTKGeoMesh::PrintCMeshVTK(cmeshP, outp, false);
         
-//        TPZCompMesh *cmeshP = DarcyControl->GetMeshes()[0].operator->();
-        TPZCompMesh *cmeshP = DarcyControl->CMesh().operator->();
+//
+        
+        TPZCompMesh *cmesh = DarcyControl->CMesh().operator->();
         std::ofstream outv("MalhaC_P_MHM.vtk");
-        cmeshP->LoadReferences();
-        TPZVTKGeoMesh::PrintCMeshVTK(cmeshP, outv, false);
+        cmesh->LoadReferences();
+        TPZVTKGeoMesh::PrintCMeshVTK(cmesh, outv, false);
         
 //        TPZCompMesh *cmeshM = DarcyControl->CMesh().operator->();
 //        std::ofstream out("MalhaC_MHM.vtk");
@@ -254,7 +274,7 @@ void MHMDarcyTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAut
     
     bool shapetest = fsimData.GetShapeTest();
     //calculo solution
-    bool shouldrenumber = true;
+    bool shouldrenumber = false;
     TPZAnalysis an(cmesh,shouldrenumber);
 #ifdef USING_MKL
     TPZSymetricSpStructMatrix strmat(cmesh.operator->());
@@ -1538,22 +1558,22 @@ void MHMDarcyTest::InsertMaterialObjects(TPZMHMeshControl *control)
     ///Inserir condicao de contorno
     TPZFMatrix<STATE> val1(3,3,0.), val2(3,1,0.);
     
-    TPZBndCond * BCondD1 = mat1->CreateBC(mat1, fmatBCbott, fneumann, val1, val2);
+    TPZBndCond * BCondD1 = mat1->CreateBC(mat1, fmatBCbott, fdirichlet, val1, val2);
     BCondD1->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD1);
     //control->fMaterialBCIds.insert(fmatBCbott);
     
-    TPZBndCond * BCondD2 = mat1->CreateBC(mat1, fmatBCtop, fneumann, val1, val2);
+    TPZBndCond * BCondD2 = mat1->CreateBC(mat1, fmatBCtop, fdirichlet, val1, val2);
     BCondD2->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD2);
     //control->fMaterialBCIds.insert(fmatBCtop);
     
-    TPZBndCond * BCondD3 = mat1->CreateBC(mat1, fmatBCleft, fneumann, val1, val2);
+    TPZBndCond * BCondD3 = mat1->CreateBC(mat1, fmatBCleft, fdirichlet, val1, val2);
     BCondD3->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD3);
     //control->fMaterialBCIds.insert(fmatBCleft);
     
-    TPZBndCond * BCondD4 = mat1->CreateBC(mat1, fmatBCright, fneumann, val1, val2);
+    TPZBndCond * BCondD4 = mat1->CreateBC(mat1, fmatBCright, fdirichlet, val1, val2);
     BCondD4->SetBCForcingFunction(0, solp);
     cmesh.InsertMaterialObject(BCondD4);
     //control->fMaterialBCIds.insert(fmatBCright);
