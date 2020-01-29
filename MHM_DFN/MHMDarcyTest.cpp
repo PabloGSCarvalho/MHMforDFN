@@ -29,6 +29,7 @@
 #include "tpzgeoelrefpattern.h"
 //#include "TPZMHMDarcyDFNMeshControl.h"
 #include "TPZMHMeshControl.h"
+#include "TPZMHMDarcyDFNMeshControl.h"
 #include "tpzarc3d.h"
 #include "tpzgeoblend.h"
 
@@ -57,17 +58,22 @@ MHMDarcyTest::MHMDarcyTest()
     fmatBCbott_z=-6; //3D normal negativa
     
     //Material do elemento de interface
-    fmatLambda=9; // Multiplier material
+    fmatLagrangeFluxL=11; // Multiplier material
+    fmatLagrangeFluxR=12;
+    
+    fmatWrapH1L = 13;
+    fmatWrapH1R = 14;
+    
 //    fmatLambdaBC=3;
 
     fmatFrac=10;
     
-    fmatLambdaBC_bott=-11;
-    fmatLambdaBC_top=-12;
-    fmatLambdaBC_left=-13;
-    fmatLambdaBC_right=-14;
-    fmatLambdaBC_top_z=-15;
-    fmatLambdaBC_bott_z=-16;
+    fmatLagrangeFluxBC_bott=-11;
+    fmatLagrangeFluxBC_top=-12;
+    fmatLagrangeFluxBC_left=-13;
+    fmatLagrangeFluxBC_right=-14;
+    fmatLagrangeFluxBC_top_z=-15;
+    fmatLagrangeFluxBC_bott_z=-16;
     
     fmatInterfaceLeft=5;
     fmatInterfaceRight=6;
@@ -133,28 +139,23 @@ void MHMDarcyTest::Run()
         gmesh = CreateGMesh(n_s, h_s);
     }
     
+    //Fracture
+    InsertFractureMaterial(gmesh);
+    
     //Vetor com os indices dos elementos coarse
     TPZVec<int64_t> coarseindex;
     GetElIndexCoarseMesh(gmesh, coarseindex);
     
-    //Fracture
-    //InsertFractureMaterial(gmesh);
+
+    //InsertLagrangeFlux(gmesh);
     
     //Refinamento de subelemntos
     SubdomainRefine(nrefs,gmesh,coarseindex);
     
-    
-#ifdef PZDEBUG
-    std::ofstream fileg("MalhaGeo_0.txt"); //Impressão da malha geométrica (formato txt)
-    std::ofstream filegvtk("MalhaGeo_0.vtk"); //Impressão da malha geométrica (formato vtk)
-    gmesh->Print(fileg);
-    TPZVTKGeoMesh::PrintGMeshVTK(gmesh, filegvtk,true);
-#endif
-    
     //Criando objeto para gerenciar a malha MHM
     TPZAutoPointer<TPZGeoMesh> gmeshpointer(gmesh);
-    TPZMHMeshControl *DarcyControl;
-    DarcyControl = new TPZMHMeshControl(gmeshpointer);
+    TPZMHMDarcyDFNMeshControl *DarcyControl;
+    DarcyControl = new TPZMHMDarcyDFNMeshControl(gmeshpointer);
     DarcyControl->DefinePartitionbyCoarseIndices(coarseindex); //Define the MHM partition by the coarse element indices
     
     std::set<int> matids;
@@ -171,6 +172,11 @@ void MHMDarcyTest::Run()
     }
     
     DarcyControl->fMaterialBCIds = matids;
+    DarcyControl->fFractureMatId = fmatFrac;
+    DarcyControl->fBCLagrangeFluxMatIds[fmatBCtop]=fmatLagrangeFluxBC_top;
+    DarcyControl->fBCLagrangeFluxMatIds[fmatBCbott]=fmatLagrangeFluxBC_bott;
+    DarcyControl->fBCLagrangeFluxMatIds[fmatBCleft]=fmatLagrangeFluxBC_left;
+    DarcyControl->fBCLagrangeFluxMatIds[fmatBCright]=fmatLagrangeFluxBC_right;
     
     InsertMaterialObjects(DarcyControl);
     
@@ -189,7 +195,14 @@ void MHMDarcyTest::Run()
     //    DarcyControl->SetCoarseAverageMultipliers(true);
     //}
     
-
+#ifdef PZDEBUG
+    std::ofstream fileg("MalhaGeo_0.txt"); //Impressão da malha geométrica (formato txt)
+    std::ofstream filegvtk("MalhaGeo_0.vtk"); //Impressão da malha geométrica (formato vtk)
+    gmesh->Print(fileg);
+    TPZVTKGeoMesh::PrintGMeshVTK(gmesh, filegvtk,true);
+#endif
+    
+    
     //Malha computacional
     DarcyControl->BuildComputationalMesh(0);
     
@@ -274,7 +287,7 @@ void MHMDarcyTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAut
     
     bool shapetest = fsimData.GetShapeTest();
     //calculo solution
-    bool shouldrenumber = false;
+    bool shouldrenumber = true;
     TPZAnalysis an(cmesh,shouldrenumber);
 #ifdef USING_MKL
     TPZSymetricSpStructMatrix strmat(cmesh.operator->());
@@ -473,17 +486,17 @@ void MHMDarcyTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
                             int neigh_matID = neighbour.Element()->MaterialId();
         
                             if(neigh_matID==fmatBCbott){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_bott);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_bott);
                             }else if(neigh_matID==fmatBCtop){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_top);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_top);
                             }else if(neigh_matID==fmatBCleft){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_left);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_left);
                             }else if(neigh_matID==fmatBCright){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_right);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_right);
                             }else if(f_3Dmesh && neigh_matID==fmatBCbott_z){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_bott_z);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_bott_z);
                             }else if(f_3Dmesh && neigh_matID==fmatBCtop_z){
-                                    TPZGeoElBC(gelside, fmatLambdaBC_top_z);
+                                    TPZGeoElBC(gelside, fmatLagrangeFluxBC_top_z);
                             }
         
                             break;
@@ -503,7 +516,7 @@ void MHMDarcyTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
         
         
                     if (neighbour == gelside) {
-                            TPZGeoElBC(gelside, fmatLambda);
+                            TPZGeoElBC(gelside, fmatLagrangeFluxL);
                     }
                 }
             }
@@ -511,11 +524,13 @@ void MHMDarcyTest::InsertLowerDimMaterial(TPZGeoMesh *gmesh){
 }
 
 void MHMDarcyTest::InsertFractureMaterial(TPZGeoMesh *gmesh){
-    
-    // Inserir elmentos fmatLambda and fmatLambdaBCs
+        
     int64_t nel = gmesh->NElements();
     for (int64_t el = 0; el<nel; el++) {
         TPZGeoEl *gel = gmesh->Element(el);
+        if(!gel){
+            continue;
+        }
         if(gel->HasSubElement()&&f_allrefine)
         {
             continue;
@@ -525,27 +540,112 @@ void MHMDarcyTest::InsertFractureMaterial(TPZGeoMesh *gmesh){
         }
         int nsides = gel->NSides();
         for (int is = 0; is<nsides; is++) {
-
+            if (gel->SideDimension(is) != gmesh->Dimension() - 1) {
+                continue;
+            }
+            
             TPZGeoElSide gelside(gel,is);
             TPZGeoElSide neighbour = gelside.Neighbour();
             
-            if (neighbour == gelside) {
+            if (neighbour == gelside && f_allrefine == false) {
+                continue;
+            }
+            
+            if(neighbour.Element()->HasSubElement())
+            {
                 continue;
             }
             
             while (neighbour != gelside) {
-                if (neighbour.Element()->Dimension() == gmesh->Dimension()) {
-                    TPZGeoElBC(gelside, fmatFrac);
+                
+                if (neighbour.Element()->Dimension() == gmesh->Dimension() - 1) {
+                    
                     break;
                     
                 }
+                if(neighbour.Element()->HasSubElement()){
+                    break;
+                }
+                
+                
+                if (f_skellNeighs.NElements()>0 && IsSkellNeighbour(neighbour)) {
+                    break;
+                }
+                
                 neighbour = neighbour.Neighbour();
                 
+            }
+            
+            if (neighbour == gelside) {
+               TPZGeoElBC(gelside, fmatFrac);
             }
         }
     }
     
+    
 }
+
+void MHMDarcyTest::InsertLagrangeFlux(TPZGeoMesh *gmesh){
+
+    //InsertLagrangeFlux
+    int64_t nel = gmesh->NElements();
+    for (int64_t el = 0; el<nel; el++) {
+        TPZGeoEl *gel = gmesh->Element(el);
+        if(!gel){
+            continue;
+        }
+        if(gel->HasSubElement())
+        {
+            continue;
+        }
+        if ((gel->Dimension() != gmesh->Dimension()-1)||(gel->MaterialId()!=fmatFrac)) {
+            continue;
+        }
+        int nsides = gel->NSides();
+        
+        TPZGeoElSide gelside(gel,nsides-1);
+        TPZStack<TPZGeoElSide> allneigh;
+        gelside.AllNeighbours(allneigh);
+        
+        
+        TPZGeoElSide neighbour = gelside.Neighbour();
+        
+        if(neighbour.Element()->HasSubElement())
+        {
+            continue;
+        }
+
+        
+        int count =0;
+        while (neighbour != gelside) {
+            
+            if(neighbour.Element()->Dimension()==gmesh->Dimension()){
+                
+                if(neighbour.Side()==5) {
+                    TPZGeoElBC(gelside, fmatLagrangeFluxL);
+                    count++;
+                }else if (neighbour.Side()==7) {
+                    TPZGeoElBC(gelside, fmatLagrangeFluxL);
+                    count++;
+                }
+                //TPZGeoElBC(gelside, fLagrangeFluxMatIdL);
+                
+            }
+            if (count == 2) {
+                break;
+            }
+            
+            neighbour = neighbour.Neighbour();
+        }
+        
+        if (neighbour == gelside) {
+            continue;
+        }
+        
+    }
+    
+}
+
 
 bool MHMDarcyTest::IsSkellNeighbour(TPZGeoElSide neighbour){
 
@@ -1598,12 +1698,20 @@ void MHMDarcyTest::InsertMaterialObjects(TPZMHMeshControl *control)
     
     
     
-    // 2.1 - Material para tração tangencial 1D (Interior)
-//    TPZNullMaterial *matLambda = new TPZNullMaterial(fmatLambda);
-//    matLambda->SetDimension(fdim-1);
-//    matLambda->SetNStateVariables(1);
-//    control->CMesh()->InsertMaterialObject(matLambda);
- //   control->fMaterialIds.insert(fmatLambda);
+    // 2.1 - Material para fratura 1D
+    TPZMHMDarcyDFNMaterial *matFrac = new TPZMHMDarcyDFNMaterial(fmatFrac,fdim,1,visco,0,0);
+    cmesh.InsertMaterialObject(matFrac);
+    
+    // 3.1 - Material para fluxo (Multiplicador Lagrange)
+    TPZNullMaterial *matLagrangeFluxL = new TPZNullMaterial(fmatLagrangeFluxL);
+    matLagrangeFluxL->SetDimension(fdim-1);
+    matLagrangeFluxL->SetNStateVariables(1);
+    cmesh.InsertMaterialObject(matLagrangeFluxL);
+
+    TPZNullMaterial *matWrapH1L = new TPZNullMaterial(fmatWrapH1L);
+    matWrapH1L->SetDimension(fdim-1);
+    matWrapH1L->SetNStateVariables(1);
+    cmesh.InsertMaterialObject(matWrapH1L);
     
     
     // 2.2 - Material for interfaces (Interior)
@@ -1638,97 +1746,29 @@ void MHMDarcyTest::InsertMaterialObjects(TPZMHMeshControl *control)
 //    cmesh.InsertMaterialObject(matLambdaBC_right);
  //   control->fMaterialBCIds.insert(fmatLambdaBC_right);
     
-    if (f_3Dmesh) {
-        TPZBndCond *matLambdaBC_top_z = mat1->CreateBC(mat1, fmatLambdaBC_top_z, fneumann, val1, val2);
-        matLambdaBC_top_z->SetBCForcingFunction(0, solp);
-        cmesh.InsertMaterialObject(matLambdaBC_top_z);
-        
-        TPZBndCond *matLambdaBC_bott_z = mat1->CreateBC(mat1, fmatLambdaBC_bott_z, fneumann, val1, val2);
-        matLambdaBC_bott_z->SetBCForcingFunction(0, solp);
-        cmesh.InsertMaterialObject(matLambdaBC_bott_z);
-    }
+//    if (f_3Dmesh) {
+//        TPZBndCond *matLambdaBC_top_z = mat1->CreateBC(mat1, fmatLambdaBC_top_z, fneumann, val1, val2);
+//        matLambdaBC_top_z->SetBCForcingFunction(0, solp);
+//        cmesh.InsertMaterialObject(matLambdaBC_top_z);
+//
+//        TPZBndCond *matLambdaBC_bott_z = mat1->CreateBC(mat1, fmatLambdaBC_bott_z, fneumann, val1, val2);
+//        matLambdaBC_bott_z->SetBCForcingFunction(0, solp);
+//        cmesh.InsertMaterialObject(matLambdaBC_bott_z);
+//    }
     
 }
 
 
 void MHMDarcyTest::InsertInterfaces(TPZMultiphysicsCompMesh *cmesh_m){
     
-    std::set<int> boundaries_ids;
-    boundaries_ids.insert(fmatBCbott);
-    boundaries_ids.insert(fmatBCleft);
-    boundaries_ids.insert(fmatBCtop);
-    boundaries_ids.insert(fmatBCright);
-    if (f_3Dmesh) {
-        boundaries_ids.insert(fmatBCbott_z);
-        boundaries_ids.insert(fmatBCtop_z);
-    }
-    
-    
-    TPZInterfaceInsertion InterfaceInsertion(cmesh_m, fmatLambda, boundaries_ids, feltype);
-    TPZManVector<int64_t,3> Interfaces(2,0);
-    Interfaces[0] = fmatInterfaceLeft;
-    Interfaces[1] = fmatInterfaceRight;
-    InterfaceInsertion.SetInterfaceVectorId(Interfaces);
-    
-    if (f_allrefine) {
-        InterfaceInsertion.AddMultiphysicsInterfacesLeftNRight(fmatLambda);
-        InterfaceInsertion.AddMultiphysicsBCInterface(fmatLambdaBC_bott,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface(fmatLambdaBC_top,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface(fmatLambdaBC_left,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface(fmatLambdaBC_right,fmatInterfaceLeft);
-    }else{
-        InterfaceInsertion.AddMultiphysicsInterfacesLeftNRight2(fmatLambda);
-        InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_bott,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_top,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_left,fmatInterfaceLeft);
-        InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_right,fmatInterfaceLeft);
-        if (f_3Dmesh) {
-            InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_bott_z,fmatInterfaceLeft);
-            InterfaceInsertion.AddMultiphysicsBCInterface2(fmatLambdaBC_top_z,fmatInterfaceLeft);
-        }
-        
-    }
-    
-    
+    DebugStop();
     
 }
 
 void MHMDarcyTest::ComputeSkelNeighbours(){
     
-    if (!f_mesh0) {
-        DebugStop();
-    }
-    
-    int64_t nel = f_mesh0->NElements();
-    for (int64_t el = 0; el<nel; el++) {
-        TPZGeoEl *gel = f_mesh0->Element(el);
-//        if(gel->HasSubElement()&&f_allrefine)
-//        {
-//            continue;
-//        }
-        if (gel->MaterialId() != fmatLambda) {
-            continue;
-        }
-        int nsides = gel->NSides();
-        TPZGeoElSide gelside(gel,nsides-1);
-        TPZGeoElSide neighbour = gelside.Neighbour();
+    DebugStop();
 
-        if (neighbour == gelside) {
-            continue;
-        }
-        
-        while (neighbour != gelside) {
-            int neigh_matID = neighbour.Element()->MaterialId();
-            if (neighbour.Element()->Dimension() == f_mesh0->Dimension() && neigh_matID==fmatID) {
-                f_skellNeighs.Push(neighbour);
-            }
-            if(neighbour.Element()->HasSubElement()){
-                break;
-            }
-            neighbour = neighbour.Neighbour();
-        }
-    }
-    
 }
 
 
@@ -1862,7 +1902,7 @@ void MHMDarcyTest::GetElIndexCoarseMesh(TPZGeoMesh *gmesh, TPZVec<int64_t> &coar
         
         hassubel = gel->HasSubElement();
         eldim = gel->Dimension();
-        if(!hassubel && eldim ==dim)
+        if(!hassubel && eldim ==dim )
         {
             count++;
             coarseindex.resize(count);

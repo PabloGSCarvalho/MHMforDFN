@@ -90,11 +90,11 @@ int main(int argc, char *argv[])
         
         for (int it=0; it<=0; it++) {
             //h_level = pow(2., 1+it);
-            h_level = 4;
+            h_level = 8;
             TPZVec<int> n_s(3,0.);
-            //n_s[0]=2,n_s[1]=1;
+            n_s[0]=2,n_s[1]=1;
            
-            n_s[0]=h_level,n_s[1]=h_level;
+            //n_s[0]=h_level,n_s[1]=h_level;
             
             MHMDarcyTest  * Test2 = new MHMDarcyTest();
             //Test2->Set3Dmesh();
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
             simdata.SetSkeletonOrder(1);
             simdata.SetCoarseDivisions(n_s);
             simdata.SetDomainSize(h_s);
-            simdata.SetNInterRefs(2);
+            simdata.SetNInterRefs(0);
             simdata.SetViscosity(1.);
             simdata.SetNthreads(0);
             //simdata.SetShapeTest(); // Test for shape functions

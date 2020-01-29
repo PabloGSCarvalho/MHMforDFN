@@ -74,18 +74,26 @@ private:
     int fmatBCbott_z;//normal negativa
     
     //Material do elemento de interface
-    int fmatLambda; //Multiplier material
-    int fmatLambdaBC;
+    int fmatLagrangeFluxL; //Multiplier material
+    int fmatLagrangeFluxR;
+    
+    //Material do elemento de interface
+    int fmatWrapH1L; //Multiplier material
+    int fmatWrapH1R;
+    
+   // int fmatLagrangeFlux; //Multiplier material
+    
+    int fmatLagrangeFluxBC;
     
     int fmatFrac;
     
-    int fmatLambdaBC_bott;
-    int fmatLambdaBC_top;
-    int fmatLambdaBC_left;
-    int fmatLambdaBC_right;
+    int fmatLagrangeFluxBC_bott;
+    int fmatLagrangeFluxBC_top;
+    int fmatLagrangeFluxBC_left;
+    int fmatLagrangeFluxBC_right;
     
-    int fmatLambdaBC_top_z;
-    int fmatLambdaBC_bott_z;
+    int fmatLagrangeFluxBC_top_z;
+    int fmatLagrangeFluxBC_bott_z;
     
     int fmatInterfaceLeft;
     int fmatInterfaceRight;
@@ -181,6 +189,8 @@ public:
     
     void InsertFractureMaterial(TPZGeoMesh *gmesh);
     
+    void InsertLagrangeFlux(TPZGeoMesh *gmesh);
+    
     void ChangeExternalOrderConnects(TPZCompMesh *mesh, int addToOrder);
     /* Malhas computacionais */
     
@@ -194,7 +204,7 @@ public:
 
     void SetOriginalMesh(TPZGeoMesh *gmesh){
         f_mesh0 = gmesh;
-        ComputeSkelNeighbours(); //papapa ?????
+        //ComputeSkelNeighbours(); //papapa ?????
     };
 
     void SetSimulationData(TPZSimulationData simdata){

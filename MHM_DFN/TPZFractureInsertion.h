@@ -126,7 +126,7 @@ public:
     void OpenFractureOnH1(TPZCompMesh *cmesh);
     
     /// Open the connects of a fracture, create dim-1 fracture elements (Hdiv version)
-    void OpenFractureOnHdiv(TPZCompMesh *cmesh, int mat_id_flux_wrap);
+    void AddWraps(TPZCompMesh *cmesh, int mat_id_flux_wrap);
     
     /// Set Discontinuous elements on fractures
     void SetDiscontinuosFrac(TPZCompMesh *cmesh);

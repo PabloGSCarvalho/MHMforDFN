@@ -13,6 +13,11 @@
 #include <pzgeoel.h>
 #include "pzgeoelbc.h"
 #include "TPZMultiphysicsInterfaceEl.h"
+#include "pzelchdivbound2.h"
+#include "pzshapequad.h"
+#include "pzshapelinear.h"
+#include "pzshapetriang.h"
+
 
 /// Default constructor
 TPZFractureInsertion::TPZFractureInsertion(){
@@ -251,20 +256,33 @@ void TPZFractureInsertion::InsertFractureNeighbours(std::set<int64_t> pivot_neig
     // this is the index of the fracture element
     int64_t fractture_index = m_fracture_indexes[0];
     TPZGeoEl * fracture_element = m_geometry->Element(fractture_index);
-    
+    int count = 0;
     /// identify left and right seeds
-    TPZStack<TPZGeoElSide> all_neigh;
+    TPZStack<TPZGeoElSide> all_neigh_t,all_neigh;
     TPZGeoElSide fracture_side(fracture_element,fracture_element->NSides()-1);
-    fracture_side.AllNeighbours(all_neigh);
-    if (all_neigh.size() != 2) {
-        DebugStop();
+    fracture_side.AllNeighbours(all_neigh_t);
+    if (all_neigh_t.size() != 2) {
+        for (int i = 0; i < all_neigh_t.size(); i++) {
+            if (all_neigh_t[i].Element()->MaterialId()==501) {
+                break;
+            }else{
+                all_neigh.resize(count+1);
+                all_neigh[count] = all_neigh_t[i];
+                count++;
+            }
+        }
+        if (all_neigh.size() != 2) {
+            DebugStop();
+        }
     }
     
     // verify if the center of the neighbour is to the left or right of the element
     
     // Fist, define fracture reference vector:
-    TPZVec<REAL> coX_frac_side0(3,0.), coord_frac_side0(3,0);
-    TPZVec<REAL> coX_frac_side1(3,0.), coord_frac_side1(3,0);
+    int frac_dim = fracture_side.Element()->Dimension();
+    
+    TPZVec<REAL> coX_frac_side0(frac_dim,0.), coord_frac_side0(frac_dim,0);
+    TPZVec<REAL> coX_frac_side1(frac_dim,0.), coord_frac_side1(frac_dim,0);
 
     fracture_element->CenterPoint(0, coX_frac_side0);
     fracture_element->CenterPoint(1, coX_frac_side1);
@@ -275,7 +293,11 @@ void TPZFractureInsertion::InsertFractureNeighbours(std::set<int64_t> pivot_neig
     // Second, find center coordinates of fracture neighbour
     TPZGeoEl * gel_neigh0 = all_neigh[0].Element();
     TPZGeoEl * gel_neigh1 = all_neigh[1].Element();
-    TPZVec<REAL> coX_neigh0(3,0.), coord_neigh0(3,0);
+    
+    int neigh0_dim = gel_neigh0->Dimension();
+    int neigh1_dim = gel_neigh1->Dimension();
+    
+    TPZVec<REAL> coX_neigh0(neigh0_dim,0.), coord_neigh0(3,0);
     int gel_neigh0_side = gel_neigh0->NSides()-1;
     gel_neigh0->CenterPoint(gel_neigh0_side, coX_neigh0);
     gel_neigh0->X(coX_neigh0, coord_neigh0);
@@ -612,7 +634,7 @@ void  TPZFractureInsertion::OpenFractureOnH1(TPZCompMesh *cmesh){
 }
 
 /// Open the connects of a fracture, create dim-1 fracture elements (Hdiv version)
-void TPZFractureInsertion::OpenFractureOnHdiv(TPZCompMesh *cmesh, int mat_id_flux_wrap){
+void TPZFractureInsertion::AddWraps(TPZCompMesh *cmesh, int mat_id_flux_wrap){
     
 #ifdef PZDEBUG
     if (!cmesh) {
@@ -663,7 +685,7 @@ void TPZFractureInsertion::OpenFractureOnHdiv(TPZCompMesh *cmesh, int mat_id_flu
             TPZConnect &midsideconnect = intel->MidSideConnect(neigh[0].Side());
             if(midsideconnect.NElConnected() != 2)
             {
-                DebugStop();
+            //    DebugStop();
             }
             
             //Duplica um connect
@@ -672,11 +694,21 @@ void TPZFractureInsertion::OpenFractureOnHdiv(TPZCompMesh *cmesh, int mat_id_flu
             intel->SetConnectIndex(locindex, index);
             midsideconnect.DecrementElConnected();
             cmesh->ConnectVec()[index].IncrementElConnected();
-            intel->SetSideOrient(neigh[0].Side(), 1);
+            
+            
+            
+           // intel->SetSideOrient(neigh[0].Side(), 1);
             
         
             TPZGeoElBC bc(intel->Reference(),neigh[0].Side(),mat_id_flux_wrap);
             cmesh->CreateCompEl(bc.CreatedElement(), index);
+            
+            TPZInterpolationSpace *bound;
+            bound = new TPZCompElHDivBound2<pzshape::TPZShapeLinear>(*intel->Mesh(),bc.CreatedElement(),index);
+            int sideorient = neigh[0].Side();
+            TPZCompElHDivBound2<pzshape::TPZShapeLinear> *hdivbound = dynamic_cast< TPZCompElHDivBound2<pzshape::TPZShapeLinear> *>(bound);
+            hdivbound->SetSideOrient(pzshape::TPZShapeLinear::NSides-1,sideorient);
+
             
             TPZCompEl *var = cmesh->Element(index);
             var->Reference()->ResetReference();
@@ -695,12 +727,22 @@ void TPZFractureInsertion::OpenFractureOnHdiv(TPZCompMesh *cmesh, int mat_id_flu
             
             intel->LoadElementReference();
             
-            intel->SetSideOrient(neigh[1].Side(), 1);
+//            intel->SetSideOrient(neigh[1].Side(), 1);
             
             int64_t index;
             
-            TPZGeoElBC bc(intel->Reference(),neigh[1].Side(),mat_id_flux_wrap);
+            TPZGeoElBC bc(intel->Reference(),neigh[1].Side(),mat_id_flux_wrap+1);
             cmesh->CreateCompEl(bc.CreatedElement(), index);
+            
+            
+            TPZInterpolationSpace *bound;
+            bound = new TPZCompElHDivBound2<pzshape::TPZShapeLinear>(*intel->Mesh(),bc.CreatedElement(),index);
+            int sideorient = neigh[1].Side();
+            TPZCompElHDivBound2<pzshape::TPZShapeLinear> *hdivbound = dynamic_cast< TPZCompElHDivBound2<pzshape::TPZShapeLinear> *>(bound);
+            hdivbound->SetSideOrient(pzshape::TPZShapeLinear::NSides-1,sideorient);
+            
+            
+            
             TPZCompEl *var = cmesh->Element(index);
             var->Reference()->ResetReference();
             
@@ -721,8 +763,8 @@ void TPZFractureInsertion::SetDiscontinuosFrac(TPZCompMesh *cmesh){
     int meshdim = cmesh->Dimension();
     cmesh->SetDimModel(meshdim);
     //cmesh->ApproxSpace().SetAllCreateFunctionsHDiv(meshdim);
-    cmesh->ApproxSpace().SetAllCreateFunctionsContinuousWithMem();
-    cmesh->ApproxSpace().CreateDisconnectedElements(true);
+    cmesh->ApproxSpace().SetAllCreateFunctionsContinuous();
+    //cmesh->ApproxSpace().CreateDisconnectedElements(true);
     TPZGeoMesh *gmesh = cmesh->Reference();
     gmesh->ResetReference();
 
