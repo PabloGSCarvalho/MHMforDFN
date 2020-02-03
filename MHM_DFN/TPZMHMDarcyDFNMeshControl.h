@@ -47,6 +47,8 @@ public:
 
     virtual void CreateInterfaceElements();
     
+    virtual void CreateSkeleton();
+    
     void InsertInternalMultipliers();
     
     void InsertBCMultipliers();
@@ -74,6 +76,12 @@ public:
     
     void SetFracSubDomain(int fracMatId);
     
+    void CreateSkeletonElements();
+    
+    void CreateFractureInterfaces();
+    
+    void CreateLagrangeMultiplierMesh();
+    
 public:
     
     /// material id associated with the internal skeleton elements
@@ -96,6 +104,12 @@ public:
     
     /// material ids associated with the BC skeleton elements
     std::map<int64_t,int64_t> fBCLagrangeFluxMatIds;
+    
+    /// material id associated with the lagrange multiplier elements
+    int64_t  fLagrangeMatIdFrac = 552;
+    
+    // geoindex of fractures and next pair of bounds
+    std::set<std::map<int64_t, std::pair<int64_t,int64_t> > > fFracInterfaces;
     
 };
 

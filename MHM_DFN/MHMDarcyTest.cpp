@@ -145,8 +145,8 @@ void MHMDarcyTest::Run()
     //Vetor com os indices dos elementos coarse
     TPZVec<int64_t> coarseindex;
     GetElIndexCoarseMesh(gmesh, coarseindex);
-    
 
+    
     //InsertLagrangeFlux(gmesh);
     
     //Refinamento de subelemntos
@@ -156,10 +156,13 @@ void MHMDarcyTest::Run()
     TPZAutoPointer<TPZGeoMesh> gmeshpointer(gmesh);
     TPZMHMDarcyDFNMeshControl *DarcyControl;
     DarcyControl = new TPZMHMDarcyDFNMeshControl(gmeshpointer);
+    
     DarcyControl->DefinePartitionbyCoarseIndices(coarseindex); //Define the MHM partition by the coarse element indices
+    
     
     std::set<int> matids;
     matids.insert(fmatID);
+    matids.insert(fmatFrac);
     DarcyControl->fMaterialIds = matids;
     matids.clear();
     matids.insert(fmatBCtop);
@@ -186,7 +189,14 @@ void MHMDarcyTest::Run()
     DarcyControl->DivideSkeletonElements(0); //Insere material id do skeleton wrap
     bool Add_LagrangeAverageP = true;
     DarcyControl->SetLagrangeAveragePressure(Add_LagrangeAverageP);
+
     
+#ifdef PZDEBUG
+    std::ofstream fileg("MalhaGeo_0.txt"); //Impressão da malha geométrica (formato txt)
+    std::ofstream filegvtk("MalhaGeo_0.vtk"); //Impressão da malha geométrica (formato vtk)
+    gmesh->Print(fileg);
+    TPZVTKGeoMesh::PrintGMeshVTK(gmesh, filegvtk,true);
+#endif
 
     //std::vector<int> fracture_ids(1);
     //fracture_ids[0] = fmatFrac;
@@ -195,12 +205,7 @@ void MHMDarcyTest::Run()
     //    DarcyControl->SetCoarseAverageMultipliers(true);
     //}
     
-#ifdef PZDEBUG
-    std::ofstream fileg("MalhaGeo_0.txt"); //Impressão da malha geométrica (formato txt)
-    std::ofstream filegvtk("MalhaGeo_0.vtk"); //Impressão da malha geométrica (formato vtk)
-    gmesh->Print(fileg);
-    TPZVTKGeoMesh::PrintGMeshVTK(gmesh, filegvtk,true);
-#endif
+
     
     
     //Malha computacional
@@ -287,7 +292,7 @@ void MHMDarcyTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAut
     
     bool shapetest = fsimData.GetShapeTest();
     //calculo solution
-    bool shouldrenumber = true;
+    bool shouldrenumber = false;
     TPZAnalysis an(cmesh,shouldrenumber);
 #ifdef USING_MKL
     TPZSymetricSpStructMatrix strmat(cmesh.operator->());
@@ -1699,7 +1704,7 @@ void MHMDarcyTest::InsertMaterialObjects(TPZMHMeshControl *control)
     
     
     // 2.1 - Material para fratura 1D
-    TPZMHMDarcyDFNMaterial *matFrac = new TPZMHMDarcyDFNMaterial(fmatFrac,fdim,1,visco,0,0);
+    TPZMHMDarcyDFNMaterial *matFrac = new TPZMHMDarcyDFNMaterial(fmatFrac,fdim-1,1,visco,0,0);
     cmesh.InsertMaterialObject(matFrac);
     
     // 3.1 - Material para fluxo (Multiplicador Lagrange)
