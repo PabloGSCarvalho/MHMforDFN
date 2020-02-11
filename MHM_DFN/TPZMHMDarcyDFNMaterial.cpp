@@ -146,9 +146,12 @@ void TPZMHMDarcyDFNMaterial::ContributeBC(TPZVec<TPZMaterialData> &datavec, REAL
         TPZFMatrix<STATE> gradu;
         bc.BCForcingFunction()->Execute(x,p_bc,gradu);
         p_D = p_bc[0];
-        value = p_D;
         
-        
+    }else{
+        p_D = bc.Val1()(0,0);
+    }
+    value = p_D;
+    
         switch (bc.Type()) {
             case 0: //Dirichlet for continuous formulation
             {
@@ -163,7 +166,7 @@ void TPZMHMDarcyDFNMaterial::ContributeBC(TPZVec<TPZMaterialData> &datavec, REAL
             case 1: //Neumann for continuous formulation
             {
                 
-                DebugStop();
+                //DebugStop();
                 
                 for(int j1 = 0; j1 < phi->Rows(); j1++)
                 {
@@ -207,7 +210,7 @@ void TPZMHMDarcyDFNMaterial::ContributeBC(TPZVec<TPZMaterialData> &datavec, REAL
                 break;
                 
         }
-    }
+    
     
     
 }

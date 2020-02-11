@@ -231,9 +231,14 @@ std::set<int64_t> TPZFractureInsertion::PivotNeighbours(TPZGeoElSide pivotside){
     pivotside.AllNeighbours(all_neighbors);
     std::set<int64_t> neigh_indexes;
     for (int i = 0; i < all_neighbors.size(); i++) {
+        
         if (all_neighbors[i].HasSubElement() == 1) {
             continue;
         }
+//        if (all_neighbors[i].Element()!=all_neighbors[i].Element()->LowestFather()) {
+//            continue;
+//        }
+        
         if(all_neighbors[i].Element()->Dimension() == m_geometry->Dimension()){
             neigh_indexes.insert(all_neighbors[i].Element()->Index());
         }
@@ -263,9 +268,9 @@ void TPZFractureInsertion::InsertFractureNeighbours(std::set<int64_t> pivot_neig
     fracture_side.AllNeighbours(all_neigh_t);
     if (all_neigh_t.size() != 2) {
         for (int i = 0; i < all_neigh_t.size(); i++) {
-            if (all_neigh_t[i].Element()->MaterialId()==501) {
-                break;
-            }else{
+            if (all_neigh_t[i].Element()->MaterialId()!=501) {
+//                break;
+//            }else{
                 all_neigh.resize(count+1);
                 all_neigh[count] = all_neigh_t[i];
                 count++;
@@ -396,6 +401,15 @@ bool TPZFractureInsertion::HasLeftIndexNeighbour(int64_t gel_index){
             if (m_gel_left_indexes.find(neighindex) != m_gel_left_indexes.end()) {
                 return true;
             }
+            if (neighbour.Element()->HasSubElement()) {  // procurando entre os subelementos
+                TPZStack<TPZGeoEl *> unrefinedSons;
+                neighbour.Element()->YoungestChildren(unrefinedSons);
+                for (auto sonindex : unrefinedSons) {
+                    if (m_gel_left_indexes.find(sonindex->Index()) != m_gel_left_indexes.end()) {
+                        return true;
+                    }
+                }
+            }
             neighbour = neighbour.Neighbour();
         }
     }
@@ -431,6 +445,16 @@ bool TPZFractureInsertion::HasRightIndexNeighbour(int64_t gel_index){
             if (m_gel_right_indexes.find(neighindex) != m_gel_right_indexes.end()) {
                 return true;
             }
+            if (neighbour.Element()->HasSubElement()) {  // procurando entre os subelementos
+                TPZStack<TPZGeoEl *> unrefinedSons;
+                neighbour.Element()->YoungestChildren(unrefinedSons);
+                for (auto sonindex : unrefinedSons) {
+                    if (m_gel_right_indexes.find(sonindex->Index()) != m_gel_right_indexes.end()) {
+                        return true;
+                    }
+                }
+            }
+            
             neighbour = neighbour.Neighbour();
         }
     }

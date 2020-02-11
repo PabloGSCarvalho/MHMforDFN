@@ -86,6 +86,9 @@ private:
     int fmatLagrangeFluxBC;
     
     int fmatFrac;
+    int fmatFracPointL;
+    int fmatFracPointR;
+    
     
     int fmatLagrangeFluxBC_bott;
     int fmatLagrangeFluxBC_top;
@@ -174,7 +177,7 @@ public:
     
     void BreakH1Connectivity(TPZCompMesh &cmesh, std::vector<int> fracture_ids);
     
-    void SubdomainRefine(int nDiv, TPZGeoMesh *gmesh, TPZVec<int64_t> &coarseindices);
+    void SubdomainRefine(int nDiv, TPZGeoMesh *gmesh, TPZVec<int64_t> &matIDs);
     
     void UniformRefine4(int nDiv, TPZGeoMesh *gmesh, TPZVec<REAL> centerCo, bool restriction); //Elemento escolhido pela coordenada -> grande estrutura
     
@@ -187,7 +190,7 @@ public:
     
     void InsertLowerDimMaterial(TPZGeoMesh *gmesh);
     
-    void InsertFractureMaterial(TPZGeoMesh *gmesh);
+    void InsertFractureMaterial(TPZGeoMesh *gmesh, TPZFMatrix<STATE>& fracindexes);
     
     void InsertLagrangeFlux(TPZGeoMesh *gmesh);
     
@@ -313,6 +316,8 @@ public:
     void GroupAndCondense(TPZMultiphysicsCompMesh *cmesh_m);
     
     void ComputeSkelNeighbours();
+    
+    void ComputeFractureIndexes(TPZFMatrix<STATE>& fracindexes, TPZVec<int> &n_s);
     
     bool IsSkellNeighbour(TPZGeoElSide neigh);
 

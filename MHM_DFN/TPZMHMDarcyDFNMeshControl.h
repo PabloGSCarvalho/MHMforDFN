@@ -19,6 +19,11 @@ class TPZMHMDarcyDFNMeshControl : public TPZMHMeshControl
     
 protected:
     
+    /// Computational mesh to contain the avarege pressure elements
+    TPZAutoPointer<TPZCompMesh> fAveragePressMesh;
+    
+    /// Computational mesh to contain the distributed flux elements
+    TPZAutoPointer<TPZCompMesh> fDistrFluxMesh;
     
     
 public:
@@ -61,9 +66,23 @@ public:
     void InsertPeriferalLagrangeFluxObjects();
     
     void CreateLagrangeFluxElements();
+
+    /// Insert the necessary average pressure material objects to create the average pressure mesh
+    void InsertPeriferalAveragePressMaterialObjects();
+    
+    /// Create the average pressure mesh
+    void CreateAveragePressMHMMesh();
+    
+    /// Insert the necessary distributed flux material objects to create the distributed flux material pressure mesh
+    void InsertDistributedFluxMaterialObjects();
+    
+    /// Create the distributed flux mesh
+    void CreateDistributedFluxMHMMesh();
     
     void CreateWrapElement(const TPZCompElSide &left, int multId);
 
+    void CreateFractureBC();
+    
     void CreateH1Wrappers();
     
     void CreateHDivWrappers();
@@ -80,7 +99,11 @@ public:
     
     void CreateFractureInterfaces();
     
-    void CreateLagrangeMultiplierMesh();
+    void CreateLagrangeMultiplierMesh(int dim);
+    
+    void TransferToMultiphysics();
+    
+    bool HasFracNeighbour(TPZGeoElSide &gelside);
     
 public:
     
@@ -98,6 +121,10 @@ public:
 
     /// material id associated with the fractue elements
     int64_t fFractureMatId = 10;
+
+    /// material id associated with the fractue boundaries
+    int64_t fmatFracPointL = -7;
+    int64_t fmatFracPointR = -8;
     
     /// material id of the flow elements of dimension fDim-1
     std::set<int> fFractureFlowDim1MatId;
