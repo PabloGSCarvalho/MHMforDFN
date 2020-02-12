@@ -165,6 +165,8 @@ void MHMDarcyTest::Run()
     TPZVec<int64_t> coarseindex, matIDsvec;
     GetElIndexCoarseMesh(gmesh, coarseindex);
 
+    std::cout << coarseindex << std::endl;
+    
     matIDsvec.Resize(2);
     matIDsvec[0] = fmatID;
     matIDsvec[1] = fmatFrac;
@@ -299,7 +301,7 @@ void MHMDarcyTest::SolveProblem(TPZAutoPointer<TPZCompMesh> cmesh, TPZVec<TPZAut
     
     bool shapetest = fsimData.GetShapeTest();
     //calculo solution
-    bool shouldrenumber = true;
+    bool shouldrenumber = false;
     TPZAnalysis an(cmesh,shouldrenumber);
 #ifdef USING_MKL
     TPZSymetricSpStructMatrix strmat(cmesh.operator->());
@@ -1959,6 +1961,13 @@ void MHMDarcyTest::GetElIndexCoarseMesh(TPZGeoMesh *gmesh, TPZVec<int64_t> &coar
             coarseindex.resize(count);
             coarseindex[count-1] = gel->Index();
         }
+        if(!hassubel && gel->MaterialId() == fmatFrac )
+        {
+            count++;
+            coarseindex.resize(count);
+            coarseindex[count-1] = gel->Index();
+        }
+        
     }
     
 }

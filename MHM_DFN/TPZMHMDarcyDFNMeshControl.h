@@ -24,6 +24,13 @@ protected:
     
     /// Computational mesh to contain the distributed flux elements
     TPZAutoPointer<TPZCompMesh> fDistrFluxMesh;
+
+    /// Computational mesh to contain Lagrange local multipliers
+    TPZAutoPointer<TPZCompMesh> fCMeshLagrangeLocal;
+    
+    /// Computational mesh to contain Lagrange local multipliers for average pressure
+    TPZAutoPointer<TPZCompMesh> fCMeshConstantPressureLocal;
+
     
     
 public:
@@ -100,6 +107,8 @@ public:
     void CreateFractureInterfaces();
     
     void CreateLagrangeMultiplierMesh(int dim);
+
+    void CreateLagrangeMultiplierMeshLocal(int dim);
     
     void TransferToMultiphysics();
     

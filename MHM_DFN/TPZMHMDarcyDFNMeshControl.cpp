@@ -49,12 +49,17 @@ TPZMHMDarcyDFNMeshControl::TPZMHMDarcyDFNMeshControl(TPZAutoPointer<TPZGeoMesh> 
 {
     fAveragePressMesh = new TPZCompMesh(fGMesh);
     fDistrFluxMesh = new TPZCompMesh(fGMesh);
+    fCMeshLagrangeLocal = new TPZCompMesh(fGMesh);
+    fCMeshConstantPressureLocal = new TPZCompMesh(fGMesh);
+    
 }
 
 TPZMHMDarcyDFNMeshControl::TPZMHMDarcyDFNMeshControl(int dimension) : TPZMHMeshControl(dimension), fFractureMatId(10.), fFractureFlowDim1MatId(), fBCLagrangeFluxMatIds() {
     
     fAveragePressMesh = new TPZCompMesh(fGMesh);
     fDistrFluxMesh = new TPZCompMesh(fGMesh);
+    fCMeshLagrangeLocal = new TPZCompMesh(fGMesh);
+    fCMeshConstantPressureLocal = new TPZCompMesh(fGMesh);
     fmatFracPointL = -7;
     fmatFracPointR = -8;
 }
@@ -63,6 +68,8 @@ TPZMHMDarcyDFNMeshControl::TPZMHMDarcyDFNMeshControl(TPZAutoPointer<TPZGeoMesh> 
     
     fAveragePressMesh = new TPZCompMesh(fGMesh);
     fDistrFluxMesh = new TPZCompMesh(fGMesh);
+    fCMeshLagrangeLocal = new TPZCompMesh(fGMesh);
+    fCMeshConstantPressureLocal = new TPZCompMesh(fGMesh);
     fmatFracPointL = -7;
     fmatFracPointR = -8;
 }
@@ -77,6 +84,9 @@ TPZMHMDarcyDFNMeshControl &TPZMHMDarcyDFNMeshControl::operator=(const TPZMHMDarc
     
     fDistrFluxMesh = cp.fDistrFluxMesh;
     fAveragePressMesh = cp.fAveragePressMesh;
+    fCMeshLagrangeLocal = cp.fCMeshLagrangeLocal;
+    fCMeshConstantPressureLocal = cp.fCMeshConstantPressureLocal;
+
     return *this;
 }
 
@@ -93,10 +103,10 @@ void TPZMHMDarcyDFNMeshControl::BuildComputationalMesh(bool usersubstructure)
     int dim = fGMesh->Dimension();
     fCMesh->SetDimModel(dim);
 
-    
     fFractureFlowDim1MatId.insert(fFractureMatId);
     
     InsertH1Fracture(fCMesh);
+
     
     InsertPeriferalMaterialObjects();
     CreateInternalElements();
@@ -117,11 +127,8 @@ void TPZMHMDarcyDFNMeshControl::BuildComputationalMesh(bool usersubstructure)
     TPZVTKGeoMesh::PrintGMeshVTK(fGMesh, filegvtk1,true);
 #endif
     
-
-    
 //    InsertPeriferalLagrangeFluxObjects();
 //    CreateLagrangeFluxElements();
-    
     CreateSkeleton();
 //    CreateSkeletonElements2();
     
@@ -135,26 +142,38 @@ void TPZMHMDarcyDFNMeshControl::BuildComputationalMesh(bool usersubstructure)
     
     
     // Distributed Flux and Average pressure for internal elements
-    SetFracSubDomain(fFractureMatId);
-    InsertDistributedFluxMaterialObjects();
-    CreateDistributedFluxMHMMesh();
-    InsertPeriferalAveragePressMaterialObjects();
-    CreateAveragePressMHMMesh();
+    
+    //SetFracSubDomain(fFractureMatId);
+    
+    fCMeshLagrangeLocal = new TPZCompMesh(fGMesh);
+    this->CreateLagrangeMultiplierMeshLocal(fGMesh->Dimension());
+//    SetFracSubDomain(fFractureMatId);
+    this->CreateLagrangeMultiplierMeshLocal(fGMesh->Dimension()-1);
+    
+    
+//    InsertDistributedFluxMaterialObjects();
+//    CreateDistributedFluxMHMMesh();
+//    InsertPeriferalAveragePressMaterialObjects();
+//    CreateAveragePressMHMMesh();
     
 
     if (fLagrangeAveragePressure) {
         fCMeshLagrange = new TPZCompMesh(fGMesh);
         this->CreateLagrangeMultiplierMesh(fGMesh->Dimension());
-        SetFracSubDomain(fFractureMatId);
-        this->CreateLagrangeMultiplierMesh(fGMesh->Dimension()-1);
         
-        std::ofstream fileCData("ConnectsData.txt");
-        this->Print(fileCData);
+        this->CreateLagrangeMultiplierMesh(fGMesh->Dimension()-1);
+//
+//        std::ofstream fileCData("ConnectsData.txt");
+//        this->Print(fileCData);
 
         std::ofstream filec2("MalhaC_Cmesh.txt");
         fCMesh->Print(filec2);
         
         this->TransferToMultiphysics();
+        
+
+        std::ofstream fileCData("ConnectsData.txt");
+        this->Print(fileCData);
         
     }
     
@@ -179,9 +198,6 @@ void TPZMHMDarcyDFNMeshControl::BuildComputationalMesh(bool usersubstructure)
         this->SubStructure();
     }
     fNumeq = fCMesh->NEquations();
-    
-
-    
 }
 
 
@@ -573,12 +589,19 @@ void TPZMHMDarcyDFNMeshControl::SetFracSubDomain(int fracMatId){
             continue;
         }
 
+        if(fGMesh->Element(el)!=fGMesh->Element(el)->LowestFather()){
+            continue;
+        }
+            
+        
         TPZGeoEl *gel = fGMesh->Element(el);
 
         int ngeoToMHM = fGeoToMHMDomain.size();
         
+        int elindex = gel->Index();
+        
         ngeoToMHM++;
-        fGeoToMHMDomain[gel->Index()] = gel->Index();
+        fGeoToMHMDomain[elindex] = fGeoToMHMDomain[elindex];
         fMHMtoSubCMesh[gel->Index()] = -1;
         
     }
@@ -1591,6 +1614,10 @@ void TPZMHMDarcyDFNMeshControl::CreateInternalElements()
         for (int64_t el=0; el< nel; el++)
         {
             TPZGeoEl *gel = fGMesh->Element(el);
+            if (gel->MaterialId()==fFractureMatId) {
+                continue;
+            }
+            
             if (!gel || gel->HasSubElement() || fGeoToMHMDomain[el] != itMHM->first) {
                 continue;
             }
@@ -2223,6 +2250,142 @@ void TPZMHMDarcyDFNMeshControl::CreateLagrangeMultiplierMesh(int dim)
     fGMesh->ResetReference();
 }
 
+/// create the lagrange multiplier mesh, one element for each subdomain
+void TPZMHMDarcyDFNMeshControl::CreateLagrangeMultiplierMeshLocal(int dim)
+{
+    
+    fCMeshLagrangeLocal->SetDimModel(dim);
+    fCMeshLagrangeLocal->SetAllCreateFunctionsDiscontinuous();
+    if (fProblemType == EScalar) {
+        fCMeshLagrangeLocal->SetDefaultOrder(0);
+    }
+    else if(fProblemType == EElasticity2D)
+    {
+        fCMeshLagrangeLocal->SetDefaultOrder(1);
+    }
+    fGMesh->ResetReference();
+    int64_t connectcounter = fCMesh->NConnects();
+    /// criar materiais
+    std::set<int> matids;
+    TPZGeoMesh &gmesh = fGMesh;
+    int64_t nel = gmesh.NElements();
+    // this code needs to be modified to create lagrange computational elements which share a connect
+    // between each other
+    //DebugStop();
+//    for (int64_t el=0; el<nel; el++) {
+//        TPZGeoEl *gel = gmesh.ElementVec()[el];
+//        if (!gel) {
+//            continue;
+//        }
+//        if (gel->HasSubElement()) {
+//            continue;
+//        }
+//        if (gel->Dimension() != dim) {
+//            continue;
+//        }
+//        int materialid = gel->MaterialId();
+//        matids.insert(materialid);
+//    }
+    
+    int materialid =0;
+    
+    if (dim == fGMesh->Dimension()) {
+        materialid = 1;
+    }else if(dim == fGMesh->Dimension()-1){
+        materialid = fFractureMatId;
+    }
+    matids.insert(materialid);
+    
+    
+    TPZManVector<STATE,1> sol(1,0.);
+    int nstate = 1;
+    std::set<int>::iterator it = matids.begin();
+    TPZMaterial *meshmat = 0;
+    while (it != matids.end()) {
+        TPZNullMaterial *material = new TPZNullMaterial(*it);
+        fCMeshLagrangeLocal->InsertMaterialObject(material);
+        if (!meshmat) {
+            meshmat = material;
+        }
+        it++;
+        
+    }
+    if (!meshmat) {
+        DebugStop();
+    }
+    TPZCompElDisc::SetTotalOrderShape(fCMeshLagrangeLocal.operator->());
+    for (int64_t el=0; el<nel; el++) {
+        TPZGeoEl *gel = gmesh.ElementVec()[el];
+        if (!gel) continue;
+        if (gel->MaterialId() != materialid) continue;
+        if (gel->Dimension() != dim) continue;
+        if (gel->HasSubElement()) continue;
+
+        int64_t index;
+        TPZCompElDisc *disc = new TPZCompElDisc(fCMeshLagrangeLocal,gel,index);
+        disc->SetTotalOrderShape();
+        disc->SetFalseUseQsiEta();
+        int64_t cindex = disc->ConnectIndex(0);
+#ifdef PZDEBUG
+        static int count = 0;
+        if (count == 0)
+        {
+            TPZConnect &c = disc->Connect(0);
+            std::cout << "Number of shape functions of discontinuous element " << c.NShape() << std::endl;
+            count++;
+        }
+#endif
+//        SetSubdomain(disc, el);
+        
+#ifdef PZDEBUG
+        if (fGeoToMHMDomain[gel->Index()] == -1) {
+            DebugStop();
+        }
+#endif
+        
+        SetSubdomain(disc, fGeoToMHMDomain[gel->Index()]);
+
+    }
+    fCMeshLagrangeLocal->ExpandSolution();
+    fGMesh->ResetReference();
+    
+    fCMeshConstantPressureLocal = new TPZCompMesh(fCMeshLagrangeLocal);
+    {
+        int64_t nel = fCMeshConstantPressureLocal->NElements();
+        for (int64_t el=0; el<nel; el++) {
+//
+//            TPZGeoEl *gel = gmesh.ElementVec()[el];
+//            if (!gel) continue;
+//            if (gel->MaterialId() != materialid) continue;
+//            if (gel->Dimension() != dim) continue;
+//            if (gel->HasSubElement()) continue;
+
+            TPZCompEl *cel = fCMeshConstantPressureLocal->Element(el);
+            TPZCompEl *cel2 = fCMeshLagrangeLocal->Element(el);
+            int subdomain = WhichSubdomain(cel2);
+            SetSubdomain(cel, subdomain);
+        }
+    }
+    
+//    if (dim==1) {
+        std::ofstream filec1("MalhaC_Lagrange_Local.txt");
+        fCMeshLagrangeLocal->Print(filec1);
+        
+        std::ofstream filec2("MalhaC_ConstPress_Local.txt");
+        fCMeshConstantPressureLocal->Print(filec2);
+//    }
+    
+#ifdef LOG4CXX
+    if (logger->isDebugEnabled()) {
+        std::stringstream sout;
+        fCMeshLagrangeLocal->Print(sout);
+        fCMeshConstantPressureLocal->Print(sout);
+        LOGPZ_DEBUG(logger, sout.str())
+    }
+#endif
+    fGMesh->ResetReference();
+}
+
 /// transform the computational mesh into a multiphysics mesh
 void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
 {
@@ -2271,9 +2434,9 @@ void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
     
 
     
-    nel = fCMeshLagrange->NElements();
+    nel = fCMeshLagrangeLocal->NElements();
     for (int64_t el=0; el<nel; el++) {
-        TPZCompEl *cel = fCMeshLagrange->ElementVec()[el];
+        TPZCompEl *cel = fCMeshLagrangeLocal->ElementVec()[el];
         TPZGeoEl *gel = cel->Reference();
         int nsides = gel->NSides();
         TPZGeoElSide gelside(gel,nsides-1);
@@ -2292,10 +2455,33 @@ void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
     }
     fGMesh->ResetReference();
     fCMesh->LoadReferences();
+   
     
-    nel = fCMeshConstantPressure->NElements();
+//    nel = fCMeshLagrange->NElements();
+//    for (int64_t el=0; el<nel; el++) {
+//        TPZCompEl *cel = fCMeshLagrange->ElementVec()[el];
+//        TPZGeoEl *gel = cel->Reference();
+//        int nsides = gel->NSides();
+//        TPZGeoElSide gelside(gel,nsides-1);
+//        TPZStack<TPZCompElSide> celstack;
+//        //        gelside.ConnectedCompElementList(celstack, 0, 0);
+//        if (gel->Reference()) {
+//            celstack.Push(gelside.Reference());
+//        }
+//        int nstack = celstack.size();
+//        if(nstack != 1) DebugStop();
+//        for (int ist=0; ist<nstack; ist++) {
+//            TPZCompEl *celmult = celstack[ist].Element();
+//            TPZMultiphysicsElement *mult = dynamic_cast<TPZMultiphysicsElement *>(celmult);
+//            mult->AddElement(cel, 3);
+//        }
+//    }
+//    fGMesh->ResetReference();
+//    fCMesh->LoadReferences();
+    
+    nel = fCMeshConstantPressureLocal->NElements();
     for (int64_t el=0; el<nel; el++) {
-        TPZCompEl *cel = fCMeshConstantPressure->ElementVec()[el];
+        TPZCompEl *cel = fCMeshConstantPressureLocal->ElementVec()[el];
         TPZGeoEl *gel = cel->Reference();
         int nsides = gel->NSides();
         TPZGeoElSide gelside(gel,nsides-1);
@@ -2333,8 +2519,8 @@ void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
     //void TPZBuildMultiphysicsMesh::AddConnects(TPZVec<TPZCompMesh *> cmeshVec, TPZCompMesh *MFMesh)
     TPZManVector<TPZCompMesh *,3> cmeshvec(3,0);
     cmeshvec[0] = fPressureFineMesh.operator->();
-    cmeshvec[1] = fCMeshLagrange.operator->();
-    cmeshvec[2] = fCMeshConstantPressure.operator->();
+    cmeshvec[1] = fCMeshLagrangeLocal.operator->();
+    cmeshvec[2] = fCMeshConstantPressureLocal.operator->();
     TPZCompMesh *cmesh = fCMesh.operator->();
     TPZBuildMultiphysicsMesh::AddConnects(cmeshvec,cmesh);
     
@@ -2362,13 +2548,13 @@ void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
     }
     
     
-    nel = fCMeshConstantPressure->NElements();
+    nel = fCMeshConstantPressureLocal->NElements();
     int64_t npressconnect = fPressureFineMesh->NConnects();
-    int64_t nlagrangeconnect = fCMeshLagrange->NConnects();
+    int64_t nlagrangeconnect = fCMeshLagrangeLocal->NConnects();
     // nel numero de dominios MHM, tem um connect associado a cada um e os mesmos estao no final
     for (int64_t el=0; el<nel; el++)
     {
-        TPZCompEl *cel = this->fCMeshConstantPressure->Element(el);
+        TPZCompEl *cel = this->fCMeshConstantPressureLocal->Element(el);
         int64_t pressureconnect = cel->ConnectIndex(0);
         int64_t cindex = npressconnect+nlagrangeconnect+pressureconnect;
         fCMesh->ConnectVec()[cindex].SetLagrangeMultiplier(3);
@@ -2380,6 +2566,9 @@ void TPZMHMDarcyDFNMeshControl::TransferToMultiphysics()
         std::ofstream filecp("Malha_FinePressure.txt");
         fPressureFineMesh->Print(filecp);
     
+        std::ofstream filecL("Malha_LagrangeMult.txt");
+        fCMeshLagrangeLocal->Print(filecL);
+        
         std::ofstream filecm("MalhaC2_MHM.txt");
         fCMesh->Print(filecm);
     }
